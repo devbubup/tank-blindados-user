@@ -34,10 +34,10 @@ class MyApp extends StatelessWidget
     return ChangeNotifierProvider(
       create: (context) => AppInfo(),
       child: MaterialApp(
-        title: "User App",
+        title: 'User App',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          scaffoldBackgroundColor: Colors.white, // Define o fundo do app para branco
+        theme: ThemeData.dark().copyWith(
+          scaffoldBackgroundColor: Colors.black,
         ),
         home: FirebaseAuth.instance.currentUser == null ? LoginScreen() : HomePage(),
       ),

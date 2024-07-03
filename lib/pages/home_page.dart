@@ -9,9 +9,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:users_app/authentication/login_screen.dart';
 import 'package:users_app/global/global_var.dart';
+import 'package:users_app/global/trip_var.dart';
 import 'package:users_app/methods/common_methods.dart';
 import 'package:users_app/models/direction_details.dart';
 import 'package:users_app/pages/search_destination_page.dart';
@@ -40,11 +42,15 @@ class _HomePageState extends State<HomePage>
   double searchContainerHeight = 276;
   double bottomMapPadding = 0;
   double rideDetailsContainerHeight = 0;
+  double requestContainerHeight = 0;
+  double tripContainerHeight = 0;
   DirectionDetails? tripDirectionDetailsInfo;
   List<LatLng> polylineCoOrdinates = [];
   Set<Polyline> polylineSet = {};
   Set<Marker> markerSet = {};
   Set<Circle> circleSet = {};
+  bool isDrawerOpened = true;
+  String stateOfApp = "normal";
 
 
   void updateMapTheme(GoogleMapController controller)
@@ -121,6 +127,7 @@ class _HomePageState extends State<HomePage>
       searchContainerHeight = 0;
       bottomMapPadding = 240;
       rideDetailsContainerHeight = 242;
+      isDrawerOpened = false;
     });
   }
 
@@ -254,6 +261,50 @@ class _HomePageState extends State<HomePage>
     });
   }
 
+  resetAppNow()
+  {
+    setState(() {
+      polylineCoOrdinates.clear();
+      polylineSet.clear();
+      markerSet.clear();
+      circleSet.clear();
+      rideDetailsContainerHeight = 0;
+      requestContainerHeight = 0;
+      tripContainerHeight = 0;
+      searchContainerHeight = 276;
+      bottomMapPadding = 300;
+      isDrawerOpened = true;
+
+      status = "";
+      nameDriver = "";
+      photoDriver = "";
+      phoneNumberDriver = "";
+      carDetailsDriver = "";
+      tripStatusDisplay = 'Driver is Arriving';
+    });
+  }
+
+  cancelRideRequest()
+  {
+    //remove ride request from database
+
+    setState(() {
+      stateOfApp = "normal";
+    });
+  }
+
+  displayRequestContainer()
+  {
+    setState(() {
+      rideDetailsContainerHeight = 0;
+      requestContainerHeight = 220;
+      bottomMapPadding = 200;
+      isDrawerOpened = true;
+    });
+
+    //send ride request
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -307,7 +358,7 @@ class _HomePageState extends State<HomePage>
                           const SizedBox(height: 4,),
 
                           const Text(
-                            "Perfil",
+                            "Profile",
                             style: TextStyle(
                               color: Colors.white38,
                             ),
@@ -335,7 +386,7 @@ class _HomePageState extends State<HomePage>
                   onPressed: (){},
                   icon: const Icon(Icons.info, color: Colors.grey,),
                 ),
-                title: const Text("Sobre", style: TextStyle(color: Colors.grey),),
+                title: const Text("About", style: TextStyle(color: Colors.grey),),
               ),
 
               GestureDetector(
@@ -350,7 +401,7 @@ class _HomePageState extends State<HomePage>
                     onPressed: (){},
                     icon: const Icon(Icons.logout, color: Colors.grey,),
                   ),
-                  title: const Text("Sair", style: TextStyle(color: Colors.grey),),
+                  title: const Text("Logout", style: TextStyle(color: Colors.grey),),
                 ),
               ),
 
@@ -392,7 +443,14 @@ class _HomePageState extends State<HomePage>
             child: GestureDetector(
               onTap: ()
               {
-                sKey.currentState!.openDrawer();
+                if(isDrawerOpened == true)
+                {
+                  sKey.currentState!.openDrawer();
+                }
+                else
+                {
+                  resetAppNow();
+                }
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -408,11 +466,11 @@ class _HomePageState extends State<HomePage>
                     ),
                   ],
                 ),
-                child: const CircleAvatar(
+                child: CircleAvatar(
                   backgroundColor: Colors.grey,
                   radius: 20,
                   child: Icon(
-                    Icons.menu,
+                    isDrawerOpened == true ? Icons.menu : Icons.close,
                     color: Colors.black87,
                   ),
                 ),
@@ -554,7 +612,18 @@ class _HomePageState extends State<HomePage>
                                   ),
 
                                   GestureDetector(
-                                    onTap: (){},
+                                    onTap: ()
+                                    {
+                                      setState(() {
+                                        stateOfApp = "requesting";
+                                      });
+
+                                      displayRequestContainer();
+
+                                      //get nearest available online drivers
+
+                                      //search driver
+                                    },
                                     child: Image.asset(
                                       "assets/images/uberexec.png",
                                       height: 100,
@@ -575,6 +644,76 @@ class _HomePageState extends State<HomePage>
                               ),
                             ),
                           ),
+                        ),
+                      ),
+                    ),
+
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          ///request container
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              height: requestContainerHeight,
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                boxShadow:
+                [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 15.0,
+                    spreadRadius: 0.5,
+                    offset: Offset(
+                      0.7,
+                      0.7,
+                    ),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+
+                    const SizedBox(height: 12,),
+
+                    SizedBox(
+                      width: 200,
+                      child: LoadingAnimationWidget.flickr(
+                        leftDotColor: Colors.greenAccent,
+                        rightDotColor: Colors.pinkAccent,
+                        size: 50,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20,),
+
+                    GestureDetector(
+                      onTap: ()
+                      {
+                        resetAppNow();
+                        cancelRideRequest();
+                      },
+                      child: Container(
+                        height: 50,
+                        width: 50,
+                        decoration: BoxDecoration(
+                          color: Colors.white70,
+                          borderRadius: BorderRadius.circular(25),
+                          border: Border.all(width: 1.5, color: Colors.grey),
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.black,
+                          size: 25,
                         ),
                       ),
                     ),

@@ -46,7 +46,7 @@ dependencies:
   http:
   provider:
   flutter_polyline_points:
-
+  loading_animation_widget:
 
 dev_dependencies:
   flutter_test:
