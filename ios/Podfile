@@ -36,6 +36,8 @@ target 'Runner' do
     pod 'Firebase/Auth'
     pod 'Firebase/Database'
     pod 'Firebase/Storage'
+    pod 'GeoFire', :git => 'https://github.com/mrdishant/geofire-objc'
+    pod 'Reachability', '~> 3.2'
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
