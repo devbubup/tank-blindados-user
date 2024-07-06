@@ -48,6 +48,8 @@ dependencies:
   flutter_polyline_points:
   loading_animation_widget:
   flutter_geofire:
+  googleapis:
+  googleapis_auth:
 
 dev_dependencies:
   flutter_test:
