@@ -5,23 +5,22 @@ import 'package:users_app/global/global_var.dart';
 import 'package:users_app/methods/common_methods.dart';
 import 'package:users_app/models/address_model.dart';
 import 'package:users_app/models/prediction_model.dart';
+import 'package:users_app/widgets/info_dialog.dart';
 import 'package:users_app/widgets/loading_dialog.dart';
 
-class PredictionPlaceUI extends StatefulWidget
-{
+class PredictionPlaceUI extends StatefulWidget {
   PredictionModel? predictedPlaceData;
+  final bool Function(double, double) isInZonaOesteCallback;
 
-  PredictionPlaceUI({super.key, this.predictedPlaceData,});
+  PredictionPlaceUI({super.key, this.predictedPlaceData, required this.isInZonaOesteCallback});
 
   @override
   State<PredictionPlaceUI> createState() => _PredictionPlaceUIState();
 }
 
-class _PredictionPlaceUIState extends State<PredictionPlaceUI>
-{
+class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
   ///Place Details - Places API
-  fetchClickedPlaceDetails(String placeID) async
-  {
+  fetchClickedPlaceDetails(String placeID) async {
     showDialog(
       barrierDismissible: false,
       context: context,
@@ -34,22 +33,33 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI>
 
     Navigator.pop(context);
 
-    if(responseFromPlaceDetailsAPI == "error")
-    {
+    if (responseFromPlaceDetailsAPI == "error") {
       return;
     }
 
-    if(responseFromPlaceDetailsAPI["status"] == "OK")
-    {
-      AddressModel dropOffLocation = AddressModel();
+    if (responseFromPlaceDetailsAPI["status"] == "OK") {
+      double latitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
+      double longitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
 
-      dropOffLocation.placeName = responseFromPlaceDetailsAPI["result"]["name"];
-      dropOffLocation.latitudePosition = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
-      dropOffLocation.longitudePosition = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
-      dropOffLocation.placeID = placeID;
+      if (widget.isInZonaOesteCallback(latitude, longitude)) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) => InfoDialog(
+            title: "Região Indisponível",
+            description: "Os motoristas da empresa não trabalham no endereço selecionado como destino.",
+          ),
+        );
+        return;
+      }
+
+      AddressModel dropOffLocation = AddressModel(
+        placeName: responseFromPlaceDetailsAPI["result"]["name"],
+        latitudePosition: latitude,
+        longitudePosition: longitude,
+        placeID: placeID,
+      );
 
       Provider.of<AppInfo>(context, listen: false).updateDropOffLocation(dropOffLocation);
-
       Navigator.pop(context, "placeSelected");
     }
   }
@@ -57,8 +67,7 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI>
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
-      onPressed: ()
-      {
+      onPressed: () {
         fetchClickedPlaceDetails(widget.predictedPlaceData!.place_id.toString());
       },
       style: ElevatedButton.styleFrom(
@@ -67,24 +76,18 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI>
       child: SizedBox(
         child: Column(
           children: [
-
             const SizedBox(height: 10,),
-
             Row(
               children: [
-
                 const Icon(
                   Icons.share_location,
                   color: Colors.grey,
                 ),
-
                 const SizedBox(width: 13,),
-
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-
                       Text(
                         widget.predictedPlaceData!.main_text.toString(),
                         overflow: TextOverflow.ellipsis,
@@ -93,9 +96,7 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI>
                           color: Colors.black87,
                         ),
                       ),
-
                       const SizedBox(height: 3,),
-
                       Text(
                         widget.predictedPlaceData!.secondary_text.toString(),
                         overflow: TextOverflow.ellipsis,
@@ -104,16 +105,12 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI>
                           color: Colors.black54,
                         ),
                       ),
-
                     ],
                   ),
                 ),
-
               ],
             ),
-
             const SizedBox(height: 10,),
-
           ],
         ),
       ),

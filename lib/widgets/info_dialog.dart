@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
 
-class InfoDialog extends StatefulWidget
-{
-  String? title, description;
+class InfoDialog extends StatefulWidget {
+  final String? title;
+  final String? description;
 
-  InfoDialog({super.key, this.title, this.description,});
+  InfoDialog({super.key, this.title, this.description});
 
   @override
   State<InfoDialog> createState() => _InfoDialogState();
 }
 
-class _InfoDialogState extends State<InfoDialog>
-{
+class _InfoDialogState extends State<InfoDialog> {
   @override
-  Widget build(BuildContext context)
-  {
+  Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14.0),
@@ -31,45 +29,36 @@ class _InfoDialogState extends State<InfoDialog>
           child: SingleChildScrollView(
             child: Column(
               children: [
-
                 const SizedBox(height: 12,),
-
                 Text(
                   widget.title.toString(),
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 24, // Aumenta o tamanho da fonte
                     color: Colors.white60,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-
                 const SizedBox(height: 27,),
-
                 Text(
                   widget.description.toString(),
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.center, // Centraliza o texto
                   style: const TextStyle(
+                    fontSize: 18, // Aumenta o tamanho da fonte
                     color: Colors.white54,
                   ),
                 ),
-
                 const SizedBox(height: 32,),
-
                 SizedBox(
                   width: 202,
                   child: ElevatedButton(
-                    onPressed: ()
-                    {
+                    onPressed: () {
                       Navigator.pop(context);
                     },
-                    child: const Text(
-                      "OK",
-                    ),
+                    child: const Text("OK"),
                   ),
                 ),
-
                 const SizedBox(height: 12,),
-
               ],
             ),
           ),

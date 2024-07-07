@@ -4,6 +4,8 @@ import 'package:users_app/global/global_var.dart';
 import 'package:users_app/methods/common_methods.dart';
 import 'package:users_app/models/prediction_model.dart';
 import 'package:users_app/widgets/prediction_place_ui.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 
 import '../appInfo/app_info.dart';
 
@@ -14,30 +16,23 @@ class SearchDestinationPage extends StatefulWidget {
   State<SearchDestinationPage> createState() => _SearchDestinationPageState();
 }
 
-
-
-class _SearchDestinationPageState extends State<SearchDestinationPage>
-{
+class _SearchDestinationPageState extends State<SearchDestinationPage> {
   TextEditingController pickUpTextEditingController = TextEditingController();
   TextEditingController destinationTextEditingController = TextEditingController();
   List<PredictionModel> dropOffPredictionsPlacesList = [];
 
   ///Places API - Place AutoComplete
-  searchLocation(String locationName) async
-  {
-    if(locationName.length > 1)
-    {
+  searchLocation(String locationName) async {
+    if (locationName.length > 1) {
       String apiPlacesUrl = "https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$locationName&key=$googleMapKey&components=country:br";
 
       var responseFromPlacesAPI = await CommonMethods.sendRequestToAPI(apiPlacesUrl);
 
-      if(responseFromPlacesAPI == "error")
-      {
+      if (responseFromPlacesAPI == "error") {
         return;
       }
 
-      if(responseFromPlacesAPI["status"] == "OK")
-      {
+      if (responseFromPlacesAPI["status"] == "OK") {
         var predictionResultInJson = responseFromPlacesAPI["predictions"];
         var predictionsList = (predictionResultInJson as List).map((eachPlacePrediction) => PredictionModel.fromJson(eachPlacePrediction)).toList();
 
@@ -48,9 +43,33 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
     }
   }
 
+  /// Verificar se o local está na Zona Oeste
+  bool isInZonaOeste(double latitude, double longitude) {
+    // Exemplos de coordenadas para a Zona Oeste (polígono simplificado)
+    // Substitua com os valores reais conforme necessário
+    List<LatLng> zonaOestePolygon = [
+      LatLng(-23.0, -43.6),
+      LatLng(-23.0, -43.2),
+      LatLng(-22.7, -43.2),
+      LatLng(-22.7, -43.6),
+    ];
+
+    bool isInPolygon = false;
+    int j = zonaOestePolygon.length - 1;
+
+    for (int i = 0; i < zonaOestePolygon.length; i++) {
+      if ((zonaOestePolygon[i].longitude > longitude) != (zonaOestePolygon[j].longitude > longitude) &&
+          (latitude < (zonaOestePolygon[j].latitude - zonaOestePolygon[i].latitude) * (longitude - zonaOestePolygon[i].longitude) / (zonaOestePolygon[j].longitude - zonaOestePolygon[i].longitude) + zonaOestePolygon[i].latitude)) {
+        isInPolygon = !isInPolygon;
+      }
+      j = i;
+    }
+
+    return isInPolygon;
+  }
+
   @override
-  Widget build(BuildContext context)
-  {
+  Widget build(BuildContext context) {
     String userAddress = Provider.of<AppInfo>(context, listen: false).pickUpLocation!.humanReadableAddress ?? "";
     pickUpTextEditingController.text = userAddress;
 
@@ -58,15 +77,13 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
       body: SingleChildScrollView(
         child: Column(
           children: [
-
             Card(
               elevation: 10,
               child: Container(
                 height: 230,
                 decoration: const BoxDecoration(
                   color: Colors.black12,
-                  boxShadow:
-                  [
+                  boxShadow: [
                     BoxShadow(
                       color: Colors.black12,
                       blurRadius: 5.0,
@@ -79,21 +96,17 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
                   padding: const EdgeInsets.only(left: 24, top: 48, right: 24, bottom: 20),
                   child: Column(
                     children: [
-
                       const SizedBox(height: 6,),
 
                       //icon button - title
                       Stack(
                         children: [
-
                           GestureDetector(
-                            onTap: ()
-                            {
+                            onTap: () {
                               Navigator.pop(context);
                             },
                             child: const Icon(Icons.arrow_back, color: Colors.white,),
                           ),
-
                           const Center(
                             child: Text(
                               "Selecione um destino",
@@ -103,7 +116,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
                               ),
                             ),
                           ),
-
                         ],
                       ),
 
@@ -112,15 +124,12 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
                       //pickup text field
                       Row(
                         children: [
-
                           Image.asset(
                             "assets/images/initial.png",
                             height: 16,
                             width: 16,
                           ),
-
                           const SizedBox(width: 18,),
-
                           Expanded(
                             child: Container(
                               decoration: BoxDecoration(
@@ -143,7 +152,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
                               ),
                             ),
                           ),
-
                         ],
                       ),
 
@@ -152,15 +160,12 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
                       //destination text field
                       Row(
                         children: [
-
                           Image.asset(
                             "assets/images/final.png",
                             height: 16,
                             width: 16,
                           ),
-
                           const SizedBox(width: 18,),
-
                           Expanded(
                             child: Container(
                               decoration: BoxDecoration(
@@ -171,8 +176,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
                                 padding: const EdgeInsets.all(3),
                                 child: TextField(
                                   controller: destinationTextEditingController,
-                                  onChanged: (inputText)
-                                  {
+                                  onChanged: (inputText) {
                                     searchLocation(inputText);
                                   },
                                   decoration: const InputDecoration(
@@ -187,10 +191,8 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
                               ),
                             ),
                           ),
-
                         ],
                       ),
-
                     ],
                   ),
                 ),
@@ -203,12 +205,12 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: ListView.separated(
                 padding: const EdgeInsets.all(0),
-                itemBuilder: (context, index)
-                {
+                itemBuilder: (context, index) {
                   return Card(
                     elevation: 3,
                     child: PredictionPlaceUI(
                       predictedPlaceData: dropOffPredictionsPlacesList[index],
+                      isInZonaOesteCallback: isInZonaOeste, // Passa a função de verificação
                     ),
                   );
                 },
@@ -219,8 +221,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage>
               ),
             )
                 : Container(),
-
-
           ],
         ),
       ),
