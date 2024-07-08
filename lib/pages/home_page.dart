@@ -61,12 +61,11 @@ class _HomePageState extends State<HomePage>
   DatabaseReference? tripRequestRef;
   List<OnlineNearbyDrivers>? availableNearbyOnlineDriversList;
 
-
   makeDriverNearbyCarIcon()
   {
     if(carIconNearbyDriver == null)
     {
-      ImageConfiguration configuration = createLocalImageConfiguration(context, size: Size(0.5, 0.5));
+      ImageConfiguration configuration = createLocalImageConfiguration(context, size: const Size(0.5, 0.5));
       BitmapDescriptor.fromAssetImage(configuration, "assets/images/tracking.png").then((iconImage)
       {
         carIconNearbyDriver = iconImage;
@@ -108,11 +107,33 @@ class _HomePageState extends State<HomePage>
     await initializeGeoFireListener();
   }
 
+  bool isInZonaOeste(double latitude, double longitude) {
+    List<LatLng> zonaOestePolygon = [
+      LatLng(-23.0, -43.6),
+      LatLng(-23.0, -43.2),
+      LatLng(-22.7, -43.2),
+      LatLng(-22.7, -43.6),
+    ];
+
+    bool isInPolygon = false;
+    int j = zonaOestePolygon.length - 1;
+
+    for (int i = 0; i < zonaOestePolygon.length; i++) {
+      if ((zonaOestePolygon[i].longitude > longitude) != (zonaOestePolygon[j].longitude > longitude) &&
+          (latitude < (zonaOestePolygon[j].latitude - zonaOestePolygon[i].latitude) * (longitude - zonaOestePolygon[i].longitude) /
+              (zonaOestePolygon[j].longitude - zonaOestePolygon[i].longitude) +
+              zonaOestePolygon[i].latitude)) {
+        isInPolygon = !isInPolygon;
+      }
+      j = i;
+    }
+
+    return isInPolygon;
+  }
+
   getUserInfoAndCheckBlockStatus() async
   {
-    DatabaseReference usersRef = FirebaseDatabase.instance.ref()
-        .child("users")
-        .child(FirebaseAuth.instance.currentUser!.uid);
+    DatabaseReference usersRef = FirebaseDatabase.instance.ref().child("users").child(FirebaseAuth.instance.currentUser!.uid);
 
     await usersRef.once().then((snap)
     {
@@ -129,7 +150,7 @@ class _HomePageState extends State<HomePage>
         {
           FirebaseAuth.instance.signOut();
 
-          Navigator.push(context, MaterialPageRoute(builder: (c)=> LoginScreen()));
+          Navigator.push(context, MaterialPageRoute(builder: (c)=> const LoginScreen()));
 
           cMethods.displaySnackBar("you are blocked. Contact admin: alizeb875@gmail.com", context);
         }
@@ -137,13 +158,25 @@ class _HomePageState extends State<HomePage>
       else
       {
         FirebaseAuth.instance.signOut();
-        Navigator.push(context, MaterialPageRoute(builder: (c)=> LoginScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (c)=> const LoginScreen()));
       }
     });
   }
 
   displayUserRideDetailsContainer() async
   {
+    // Verificar se a localização atual está na Zona Oeste
+    if (isInZonaOeste(currentPositionOfUser!.latitude, currentPositionOfUser!.longitude)) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) => InfoDialog(
+          title: "Região Indisponível",
+          description: "Os motoristas não trabalham nessa região de partida.",
+        ),
+      );
+      return; // parar a execução se o usuário estiver na área restrita
+    }
+
     ///Directions API
     await retrieveDirectionDetails();
 
@@ -482,7 +515,7 @@ class _HomePageState extends State<HomePage>
 
   searchDriver()
   {
-    if(availableNearbyOnlineDriversList!.length == 0)
+    if(availableNearbyOnlineDriversList!.isEmpty)
     {
       cancelRideRequest();
       resetAppNow();
@@ -627,7 +660,7 @@ class _HomePageState extends State<HomePage>
                 {
                   FirebaseAuth.instance.signOut();
 
-                  Navigator.push(context, MaterialPageRoute(builder: (c)=> LoginScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (c)=> const LoginScreen()));
                 },
                 child: ListTile(
                   leading: IconButton(
@@ -711,67 +744,90 @@ class _HomePageState extends State<HomePage>
             ),
           ),
 
-          ///search location icon button
+          ///buttons container
           Positioned(
             left: 0,
             right: 0,
-            bottom: -80,
+            bottom: 0,
             child: Container(
-              height: searchContainerHeight,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+              height: 250,  // Aumente a altura conforme necessário
+              color: Colors.black.withOpacity(0.8),
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+              child: Column(
                 children: [
-
-                  ElevatedButton(
-                    onPressed: () async
-                    {
-                      var responseFromSearchPage = await Navigator.push(context, MaterialPageRoute(builder: (c)=> SearchDestinationPage()));
-
-                      if(responseFromSearchPage == "placeSelected")
-                      {
+                  // Barra de pesquisa
+                  GestureDetector(
+                    onTap: () async {
+                      var responseFromSearchPage = await Navigator.push(context, MaterialPageRoute(builder: (c)=> const SearchDestinationPage()));
+                      if(responseFromSearchPage == "placeSelected") {
                         displayUserRideDetailsContainer();
                       }
                     },
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey,
-                        shape: const CircleBorder(),
-                        padding: const EdgeInsets.all(24)
-                    ),
-                    child: const Icon(
-                      Icons.search,
-                      color: Colors.white,
-                      size: 25,
-                    ),
-                  ),
-
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey,
-                        shape: const CircleBorder(),
-                        padding: const EdgeInsets.all(24)
-                    ),
-                    child: const Icon(
-                      Icons.home,
-                      color: Colors.white,
-                      size: 25,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.search, color: Colors.grey),
+                            SizedBox(width: 10),
+                            Text(
+                              "Qual o destino?",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
 
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey,
-                        shape: const CircleBorder(),
-                        padding: const EdgeInsets.all(24)
-                    ),
-                    child: const Icon(
-                      Icons.work,
-                      color: Colors.white,
-                      size: 25,
-                    ),
-                  ),
+                  const SizedBox(height: 20),
 
+                  // Botões de casa e trabalho
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      // Botão de casa
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {},
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                            padding: const EdgeInsets.all(20),
+                          ),
+                          child: const Icon(
+                            Icons.home,
+                            color: Colors.white,
+                            size: 25,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Botão de trabalho
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {},
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                            padding: const EdgeInsets.all(20),
+                          ),
+                          child: const Icon(
+                            Icons.work,
+                            color: Colors.white,
+                            size: 25,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

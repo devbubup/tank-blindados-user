@@ -6,8 +6,8 @@ import 'package:users_app/models/prediction_model.dart';
 import 'package:users_app/widgets/prediction_place_ui.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-
 import '../appInfo/app_info.dart';
+import '../widgets/info_dialog.dart';
 
 class SearchDestinationPage extends StatefulWidget {
   const SearchDestinationPage({super.key});
@@ -45,8 +45,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
 
   /// Verificar se o local está na Zona Oeste
   bool isInZonaOeste(double latitude, double longitude) {
-    // Exemplos de coordenadas para a Zona Oeste (polígono simplificado)
-    // Substitua com os valores reais conforme necessário
     List<LatLng> zonaOestePolygon = [
       LatLng(-23.0, -43.6),
       LatLng(-23.0, -43.2),
@@ -66,6 +64,34 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
     }
 
     return isInPolygon;
+  }
+
+  /// Verificação do endereço de partida
+  void checkPickUpLocation() async {
+    String pickUpPlaceID = pickUpTextEditingController.text;
+
+    String urlPlaceDetailsAPI = "https://maps.googleapis.com/maps/api/place/details/json?place_id=$pickUpPlaceID&key=$googleMapKey";
+
+    var responseFromPlaceDetailsAPI = await CommonMethods.sendRequestToAPI(urlPlaceDetailsAPI);
+
+    if (responseFromPlaceDetailsAPI == "error") {
+      return;
+    }
+
+    if (responseFromPlaceDetailsAPI["status"] == "OK") {
+      double latitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
+      double longitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
+
+      if (isInZonaOeste(latitude, longitude)) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) => InfoDialog(
+            title: "Região Indisponível",
+            description: "Os motoristas da empresa não trabalham no endereço selecionado como partida.",
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -140,6 +166,10 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                                 padding: const EdgeInsets.all(3),
                                 child: TextField(
                                   controller: pickUpTextEditingController,
+                                  onChanged: (inputText) {
+                                    // Chama a verificação do endereço de partida
+                                    checkPickUpLocation();
+                                  },
                                   decoration: const InputDecoration(
                                       hintText: "Endereço de Partida",
                                       fillColor: Colors.white12,

@@ -9,7 +9,7 @@ import 'package:users_app/widgets/info_dialog.dart';
 import 'package:users_app/widgets/loading_dialog.dart';
 
 class PredictionPlaceUI extends StatefulWidget {
-  PredictionModel? predictedPlaceData;
+  final PredictionModel? predictedPlaceData;
   final bool Function(double, double) isInZonaOesteCallback;
 
   PredictionPlaceUI({super.key, this.predictedPlaceData, required this.isInZonaOesteCallback});
