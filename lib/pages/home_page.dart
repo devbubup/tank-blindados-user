@@ -21,6 +21,8 @@ import 'package:users_app/methods/push_notification_service.dart';
 import 'package:users_app/models/direction_details.dart';
 import 'package:users_app/models/online_nearby_drivers.dart';
 import 'package:users_app/pages/search_destination_page.dart';
+import 'package:users_app/pages/profile_page.dart'; // Importe a página de perfil
+import 'package:users_app/pages/destination_search_page.dart'; // Importando a nova página de agendamento
 import 'package:users_app/widgets/info_dialog.dart';
 
 import '../appInfo/app_info.dart';
@@ -34,8 +36,6 @@ class HomePage extends StatefulWidget
   @override
   State<HomePage> createState() => _HomePageState();
 }
-
-
 
 class _HomePageState extends State<HomePage>
 {
@@ -623,10 +623,18 @@ class _HomePageState extends State<HomePage>
 
                           const SizedBox(height: 4,),
 
-                          const Text(
-                            "Profile",
-                            style: TextStyle(
-                              color: Colors.white38,
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const ProfilePage()),
+                              );
+                            },
+                            child: const Text(
+                              "Profile",
+                              style: TextStyle(
+                                color: Colors.white38,
+                              ),
                             ),
                           ),
 
@@ -789,21 +797,23 @@ class _HomePageState extends State<HomePage>
 
                   const SizedBox(height: 20),
 
-                  // Botões de casa e trabalho
+                  // Botões de agendamento e trabalho
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      // Botão de casa
+                      // Botão de agendamento
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () {},
+                          onPressed: () async {
+                            await Navigator.push(context, MaterialPageRoute(builder: (c) => const DestinationSearchPage())); // Chama a nova página de busca
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.grey,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                             padding: const EdgeInsets.all(20),
                           ),
                           child: const Icon(
-                            Icons.home,
+                            Icons.calendar_today,
                             color: Colors.white,
                             size: 25,
                           ),

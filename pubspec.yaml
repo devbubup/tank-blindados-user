@@ -50,6 +50,8 @@ dependencies:
   flutter_geofire:
   googleapis:
   googleapis_auth:
+  intl:
+  flutter_datetime_picker:
 
 dev_dependencies:
   flutter_test:
