@@ -8,18 +8,18 @@ import 'package:users_app/models/prediction_model.dart';
 import 'package:users_app/widgets/info_dialog.dart';
 import 'package:users_app/widgets/loading_dialog.dart';
 
-class PredictionPlaceUIForSchedule extends StatefulWidget {
+class PredictionPlaceUI extends StatefulWidget {
   final PredictionModel? predictedPlaceData;
   final bool Function(double, double) isInZonaOesteCallback;
-  final bool isPickup;
 
-  PredictionPlaceUIForSchedule({super.key, this.predictedPlaceData, required this.isInZonaOesteCallback, required this.isPickup});
+  PredictionPlaceUI({super.key, this.predictedPlaceData, required this.isInZonaOesteCallback});
 
   @override
-  State<PredictionPlaceUIForSchedule> createState() => _PredictionPlaceUIForScheduleState();
+  State<PredictionPlaceUI> createState() => _PredictionPlaceUIState();
 }
 
-class _PredictionPlaceUIForScheduleState extends State<PredictionPlaceUIForSchedule> {
+class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
+  ///Place Details - Places API
   fetchClickedPlaceDetails(String placeID) async {
     showDialog(
       barrierDismissible: false,
@@ -41,29 +41,25 @@ class _PredictionPlaceUIForScheduleState extends State<PredictionPlaceUIForSched
       double latitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
       double longitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
 
-      AddressModel address = AddressModel(
+      if (widget.isInZonaOesteCallback(latitude, longitude)) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) => InfoDialog(
+            title: "Região Indisponível",
+            description: "Os motoristas da empresa não trabalham no endereço selecionado como destino.",
+          ),
+        );
+        return;
+      }
+
+      AddressModel dropOffLocation = AddressModel(
         placeName: responseFromPlaceDetailsAPI["result"]["name"],
         latitudePosition: latitude,
         longitudePosition: longitude,
         placeID: placeID,
       );
 
-      if (widget.isPickup) {
-        Provider.of<AppInfo>(context, listen: false).updatePickUpLocation(address);
-      } else {
-        if (widget.isInZonaOesteCallback(latitude, longitude)) {
-          showDialog(
-            context: context,
-            builder: (BuildContext context) => InfoDialog(
-              title: "Região Indisponível",
-              description: "Os motoristas da empresa não trabalham no endereço selecionado como destino.",
-            ),
-          );
-          return;
-        }
-        Provider.of<AppInfo>(context, listen: false).updateDropOffLocation(address);
-      }
-
+      Provider.of<AppInfo>(context, listen: false).updateDropOffLocation(dropOffLocation);
       Navigator.pop(context, "placeSelected");
     }
   }
@@ -75,44 +71,39 @@ class _PredictionPlaceUIForScheduleState extends State<PredictionPlaceUIForSched
         fetchClickedPlaceDetails(widget.predictedPlaceData!.place_id.toString());
       },
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.grey[800],  // Cinza escuro para combinar com PredictionPlaceUIForSchedule
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),  // Bordas ligeiramente arredondadas
+        ),
       ),
       child: SizedBox(
+        width: double.infinity,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 10,),
-            Row(
-              children: [
-                const Icon(
-                  Icons.share_location,
-                  color: Colors.grey,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Text(
+                widget.predictedPlaceData!.main_text.toString(),
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.white,  // Texto branco para contraste
                 ),
-                const SizedBox(width: 13,),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.predictedPlaceData!.main_text.toString(),
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 3,),
-                      Text(
-                        widget.predictedPlaceData!.secondary_text.toString(),
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
+              ),
+            ),
+            const SizedBox(height: 3,),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Text(
+                widget.predictedPlaceData!.secondary_text.toString(),
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.white70,  // Texto branco com opacidade
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 10,),
           ],
