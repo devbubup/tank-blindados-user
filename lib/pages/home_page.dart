@@ -12,6 +12,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:users_app/authentication/login_screen.dart';
 import 'package:users_app/global/global_var.dart';
 import 'package:users_app/global/trip_var.dart';
@@ -27,6 +28,8 @@ import 'package:users_app/widgets/info_dialog.dart';
 
 import '../appInfo/app_info.dart';
 import '../widgets/loading_dialog.dart';
+import '../widgets/payment_dialog.dart';
+import 'about_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -36,6 +39,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+
   final Completer<GoogleMapController> googleMapCompleterController = Completer<GoogleMapController>();
   GoogleMapController? controllerGoogleMap;
   Position? currentPositionOfUser;
@@ -57,23 +61,30 @@ class _HomePageState extends State<HomePage> {
   BitmapDescriptor? carIconNearbyDriver;
   DatabaseReference? tripRequestRef;
   List<OnlineNearbyDrivers>? availableNearbyOnlineDriversList;
+  StreamSubscription<DatabaseEvent>? tripStreamSubscription;
+  bool requestingDirectionDetailsInfo = false;
+
 
   makeDriverNearbyCarIcon() {
     if (carIconNearbyDriver == null) {
-      ImageConfiguration configuration = createLocalImageConfiguration(context, size: const Size(0.5, 0.5));
-      BitmapDescriptor.fromAssetImage(configuration, "assets/images/tracking.png").then((iconImage) {
+      ImageConfiguration configuration = createLocalImageConfiguration(
+          context, size: const Size(0.5, 0.5));
+      BitmapDescriptor.fromAssetImage(
+          configuration, "assets/images/tracking.png").then((iconImage) {
         carIconNearbyDriver = iconImage;
       });
     }
   }
 
   void updateMapTheme(GoogleMapController controller) {
-    getJsonFileFromThemes("themes/night_style.json").then((value) => setGoogleMapStyle(value, controller));
+    getJsonFileFromThemes("themes/night_style.json").then((value) =>
+        setGoogleMapStyle(value, controller));
   }
 
   Future<String> getJsonFileFromThemes(String mapStylePath) async {
     ByteData byteData = await rootBundle.load(mapStylePath);
-    var list = byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes);
+    var list = byteData.buffer.asUint8List(
+        byteData.offsetInBytes, byteData.lengthInBytes);
     return utf8.decode(list);
   }
 
@@ -82,15 +93,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   getCurrentLiveLocationOfUser() async {
-    Position positionOfUser = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
+    Position positionOfUser = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.bestForNavigation);
     currentPositionOfUser = positionOfUser;
 
-    LatLng positionOfUserInLatLng = LatLng(currentPositionOfUser!.latitude, currentPositionOfUser!.longitude);
+    LatLng positionOfUserInLatLng = LatLng(
+        currentPositionOfUser!.latitude, currentPositionOfUser!.longitude);
 
-    CameraPosition cameraPosition = CameraPosition(target: positionOfUserInLatLng, zoom: 15);
-    controllerGoogleMap!.animateCamera(CameraUpdate.newCameraPosition(cameraPosition));
+    CameraPosition cameraPosition = CameraPosition(
+        target: positionOfUserInLatLng, zoom: 15);
+    controllerGoogleMap!.animateCamera(
+        CameraUpdate.newCameraPosition(cameraPosition));
 
-    await CommonMethods.convertGeoGraphicCoOrdinatesIntoHumanReadableAddress(currentPositionOfUser!, context);
+    await CommonMethods.convertGeoGraphicCoOrdinatesIntoHumanReadableAddress(
+        currentPositionOfUser!, context);
 
     await getUserInfoAndCheckBlockStatus();
 
@@ -109,10 +125,14 @@ class _HomePageState extends State<HomePage> {
     int j = zonaOestePolygon.length - 1;
 
     for (int i = 0; i < zonaOestePolygon.length; i++) {
-      if ((zonaOestePolygon[i].longitude > longitude) != (zonaOestePolygon[j].longitude > longitude) &&
-          (latitude < (zonaOestePolygon[j].latitude - zonaOestePolygon[i].latitude) * (longitude - zonaOestePolygon[i].longitude) /
-              (zonaOestePolygon[j].longitude - zonaOestePolygon[i].longitude) +
-              zonaOestePolygon[i].latitude)) {
+      if ((zonaOestePolygon[i].longitude > longitude) !=
+          (zonaOestePolygon[j].longitude > longitude) &&
+          (latitude <
+              (zonaOestePolygon[j].latitude - zonaOestePolygon[i].latitude) *
+                  (longitude - zonaOestePolygon[i].longitude) /
+                  (zonaOestePolygon[j].longitude -
+                      zonaOestePolygon[i].longitude) +
+                  zonaOestePolygon[i].latitude)) {
         isInPolygon = !isInPolygon;
       }
       j = i;
@@ -122,7 +142,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   getUserInfoAndCheckBlockStatus() async {
-    DatabaseReference usersRef = FirebaseDatabase.instance.ref().child("users").child(FirebaseAuth.instance.currentUser!.uid);
+    DatabaseReference usersRef = FirebaseDatabase.instance.ref()
+        .child("users")
+        .child(FirebaseAuth.instance.currentUser!.uid);
 
     await usersRef.once().then((snap) {
       if (snap.snapshot.value != null) {
@@ -134,26 +156,31 @@ class _HomePageState extends State<HomePage> {
         } else {
           FirebaseAuth.instance.signOut();
 
-          Navigator.push(context, MaterialPageRoute(builder: (c) => const LoginScreen()));
+          Navigator.push(
+              context, MaterialPageRoute(builder: (c) => const LoginScreen()));
 
-          cMethods.displaySnackBar("you are blocked. Contact admin: alizeb875@gmail.com", context);
+          cMethods.displaySnackBar(
+              "you are blocked. Contact admin: alizeb875@gmail.com", context);
         }
       } else {
         FirebaseAuth.instance.signOut();
-        Navigator.push(context, MaterialPageRoute(builder: (c) => const LoginScreen()));
+        Navigator.push(
+            context, MaterialPageRoute(builder: (c) => const LoginScreen()));
       }
     });
   }
 
   displayUserRideDetailsContainer() async {
     // Verificar se a localização atual está na Zona Oeste
-    if (isInZonaOeste(currentPositionOfUser!.latitude, currentPositionOfUser!.longitude)) {
+    if (isInZonaOeste(
+        currentPositionOfUser!.latitude, currentPositionOfUser!.longitude)) {
       showDialog(
         context: context,
-        builder: (BuildContext context) => InfoDialog(
-          title: "Região Indisponível",
-          description: "Os motoristas não trabalham nessa região de partida.",
-        ),
+        builder: (BuildContext context) =>
+            InfoDialog(
+              title: "Região Indisponível",
+              description: "Os motoristas não trabalham nessa região de partida.",
+            ),
       );
       return; // parar a execução se o usuário estiver na área restrita
     }
@@ -170,20 +197,30 @@ class _HomePageState extends State<HomePage> {
   }
 
   retrieveDirectionDetails() async {
-    var pickUpLocation = Provider.of<AppInfo>(context, listen: false).pickUpLocation;
-    var dropOffDestinationLocation = Provider.of<AppInfo>(context, listen: false).dropOffLocation;
+    var pickUpLocation = Provider
+        .of<AppInfo>(context, listen: false)
+        .pickUpLocation;
+    var dropOffDestinationLocation = Provider
+        .of<AppInfo>(context, listen: false)
+        .dropOffLocation;
 
-    var pickupGeoGraphicCoOrdinates = LatLng(pickUpLocation!.latitudePosition!, pickUpLocation.longitudePosition!);
-    var dropOffDestinationGeoGraphicCoOrdinates = LatLng(dropOffDestinationLocation!.latitudePosition!, dropOffDestinationLocation.longitudePosition!);
+    var pickupGeoGraphicCoOrdinates = LatLng(
+        pickUpLocation!.latitudePosition!, pickUpLocation.longitudePosition!);
+    var dropOffDestinationGeoGraphicCoOrdinates = LatLng(
+        dropOffDestinationLocation!.latitudePosition!,
+        dropOffDestinationLocation.longitudePosition!);
 
     showDialog(
       barrierDismissible: false,
       context: context,
-      builder: (BuildContext context) => LoadingDialog(messageText: "Getting direction..."),
+      builder: (BuildContext context) =>
+          LoadingDialog(messageText: "Getting direction..."),
     );
 
     ///Directions API
-    var detailsFromDirectionAPI = await CommonMethods.getDirectionDetailsFromAPI(pickupGeoGraphicCoOrdinates, dropOffDestinationGeoGraphicCoOrdinates);
+    var detailsFromDirectionAPI = await CommonMethods
+        .getDirectionDetailsFromAPI(
+        pickupGeoGraphicCoOrdinates, dropOffDestinationGeoGraphicCoOrdinates);
     setState(() {
       tripDirectionDetailsInfo = detailsFromDirectionAPI;
     });
@@ -192,12 +229,14 @@ class _HomePageState extends State<HomePage> {
 
     //draw route from pickup to dropOffDestination
     PolylinePoints pointsPolyline = PolylinePoints();
-    List<PointLatLng> latLngPointsFromPickUpToDestination = pointsPolyline.decodePolyline(tripDirectionDetailsInfo!.encodedPoints!);
+    List<PointLatLng> latLngPointsFromPickUpToDestination = pointsPolyline
+        .decodePolyline(tripDirectionDetailsInfo!.encodedPoints!);
 
     polylineCoOrdinates.clear();
     if (latLngPointsFromPickUpToDestination.isNotEmpty) {
       latLngPointsFromPickUpToDestination.forEach((PointLatLng latLngPoint) {
-        polylineCoOrdinates.add(LatLng(latLngPoint.latitude, latLngPoint.longitude));
+        polylineCoOrdinates.add(
+            LatLng(latLngPoint.latitude, latLngPoint.longitude));
       });
     }
 
@@ -219,21 +258,29 @@ class _HomePageState extends State<HomePage> {
 
     //fit the polyline into the map
     LatLngBounds boundsLatLng;
-    if (pickupGeoGraphicCoOrdinates.latitude > dropOffDestinationGeoGraphicCoOrdinates.latitude &&
-        pickupGeoGraphicCoOrdinates.longitude > dropOffDestinationGeoGraphicCoOrdinates.longitude) {
+    if (pickupGeoGraphicCoOrdinates.latitude >
+        dropOffDestinationGeoGraphicCoOrdinates.latitude &&
+        pickupGeoGraphicCoOrdinates.longitude >
+            dropOffDestinationGeoGraphicCoOrdinates.longitude) {
       boundsLatLng = LatLngBounds(
         southwest: dropOffDestinationGeoGraphicCoOrdinates,
         northeast: pickupGeoGraphicCoOrdinates,
       );
-    } else if (pickupGeoGraphicCoOrdinates.longitude > dropOffDestinationGeoGraphicCoOrdinates.longitude) {
+    } else if (pickupGeoGraphicCoOrdinates.longitude >
+        dropOffDestinationGeoGraphicCoOrdinates.longitude) {
       boundsLatLng = LatLngBounds(
-        southwest: LatLng(pickupGeoGraphicCoOrdinates.latitude, dropOffDestinationGeoGraphicCoOrdinates.longitude),
-        northeast: LatLng(dropOffDestinationGeoGraphicCoOrdinates.latitude, pickupGeoGraphicCoOrdinates.longitude),
+        southwest: LatLng(pickupGeoGraphicCoOrdinates.latitude,
+            dropOffDestinationGeoGraphicCoOrdinates.longitude),
+        northeast: LatLng(dropOffDestinationGeoGraphicCoOrdinates.latitude,
+            pickupGeoGraphicCoOrdinates.longitude),
       );
-    } else if (pickupGeoGraphicCoOrdinates.latitude > dropOffDestinationGeoGraphicCoOrdinates.latitude) {
+    } else if (pickupGeoGraphicCoOrdinates.latitude >
+        dropOffDestinationGeoGraphicCoOrdinates.latitude) {
       boundsLatLng = LatLngBounds(
-        southwest: LatLng(dropOffDestinationGeoGraphicCoOrdinates.latitude, pickupGeoGraphicCoOrdinates.longitude),
-        northeast: LatLng(pickupGeoGraphicCoOrdinates.latitude, dropOffDestinationGeoGraphicCoOrdinates.longitude),
+        southwest: LatLng(dropOffDestinationGeoGraphicCoOrdinates.latitude,
+            pickupGeoGraphicCoOrdinates.longitude),
+        northeast: LatLng(pickupGeoGraphicCoOrdinates.latitude,
+            dropOffDestinationGeoGraphicCoOrdinates.longitude),
       );
     } else {
       boundsLatLng = LatLngBounds(
@@ -242,21 +289,24 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    controllerGoogleMap!.animateCamera(CameraUpdate.newLatLngBounds(boundsLatLng, 72));
+    controllerGoogleMap!.animateCamera(
+        CameraUpdate.newLatLngBounds(boundsLatLng, 72));
 
     //add markers to pickup and dropOffDestination points
     Marker pickUpPointMarker = Marker(
       markerId: const MarkerId("pickUpPointMarkerID"),
       position: pickupGeoGraphicCoOrdinates,
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      infoWindow: InfoWindow(title: pickUpLocation.placeName, snippet: "Pickup Location"),
+      infoWindow: InfoWindow(
+          title: pickUpLocation.placeName, snippet: "Pickup Location"),
     );
 
     Marker dropOffDestinationPointMarker = Marker(
       markerId: const MarkerId("dropOffDestinationPointMarkerID"),
       position: dropOffDestinationGeoGraphicCoOrdinates,
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow),
-      infoWindow: InfoWindow(title: dropOffDestinationLocation.placeName, snippet: "Destination Location"),
+      infoWindow: InfoWindow(title: dropOffDestinationLocation.placeName,
+          snippet: "Destination Location"),
     );
 
     setState(() {
@@ -339,11 +389,14 @@ class _HomePageState extends State<HomePage> {
 
     Set<Marker> markersTempSet = Set<Marker>();
 
-    for (OnlineNearbyDrivers eachOnlineNearbyDriver in ManageDriversMethods.nearbyOnlineDriversList) {
-      LatLng driverCurrentPosition = LatLng(eachOnlineNearbyDriver.latDriver!, eachOnlineNearbyDriver.lngDriver!);
+    for (OnlineNearbyDrivers eachOnlineNearbyDriver in ManageDriversMethods
+        .nearbyOnlineDriversList) {
+      LatLng driverCurrentPosition = LatLng(
+          eachOnlineNearbyDriver.latDriver!, eachOnlineNearbyDriver.lngDriver!);
 
       Marker driverMarker = Marker(
-        markerId: MarkerId("driver ID = " + eachOnlineNearbyDriver.uidDriver.toString()),
+        markerId: MarkerId(
+            "driver ID = " + eachOnlineNearbyDriver.uidDriver.toString()),
         position: driverCurrentPosition,
         icon: carIconNearbyDriver!,
       );
@@ -358,7 +411,8 @@ class _HomePageState extends State<HomePage> {
 
   initializeGeoFireListener() {
     Geofire.initialize("onlineDrivers");
-    Geofire.queryAtLocation(currentPositionOfUser!.latitude, currentPositionOfUser!.longitude, 22)!
+    Geofire.queryAtLocation(
+        currentPositionOfUser!.latitude, currentPositionOfUser!.longitude, 22)!
         .listen((driverEvent) {
       if (driverEvent != null) {
         var onlineDriverChild = driverEvent["callBack"];
@@ -369,7 +423,8 @@ class _HomePageState extends State<HomePage> {
             onlineNearbyDrivers.uidDriver = driverEvent["key"];
             onlineNearbyDrivers.latDriver = driverEvent["latitude"];
             onlineNearbyDrivers.lngDriver = driverEvent["longitude"];
-            ManageDriversMethods.nearbyOnlineDriversList.add(onlineNearbyDrivers);
+            ManageDriversMethods.nearbyOnlineDriversList.add(
+                onlineNearbyDrivers);
 
             if (nearbyOnlineDriversKeysLoaded == true) {
               //update drivers on google map
@@ -391,7 +446,8 @@ class _HomePageState extends State<HomePage> {
             onlineNearbyDrivers.uidDriver = driverEvent["key"];
             onlineNearbyDrivers.latDriver = driverEvent["latitude"];
             onlineNearbyDrivers.lngDriver = driverEvent["longitude"];
-            ManageDriversMethods.updateOnlineNearbyDriversLocation(onlineNearbyDrivers);
+            ManageDriversMethods.updateOnlineNearbyDriversLocation(
+                onlineNearbyDrivers);
 
             //update drivers on google map
             updateAvailableNearbyOnlineDriversOnMap();
@@ -411,10 +467,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   makeTripRequest() {
-    tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").push();
+    tripRequestRef =
+        FirebaseDatabase.instance.ref().child("tripRequests").push();
 
-    var pickUpLocation = Provider.of<AppInfo>(context, listen: false).pickUpLocation;
-    var dropOffDestinationLocation = Provider.of<AppInfo>(context, listen: false).dropOffLocation;
+    var pickUpLocation = Provider
+        .of<AppInfo>(context, listen: false)
+        .pickUpLocation;
+    var dropOffDestinationLocation = Provider
+        .of<AppInfo>(context, listen: false)
+        .dropOffLocation;
 
     Map pickUpCoOrdinatesMap = {
       "latitude": pickUpLocation!.latitudePosition.toString(),
@@ -454,443 +515,723 @@ class _HomePageState extends State<HomePage> {
     };
 
     tripRequestRef!.set(dataMap);
-  }
 
-  noDriverAvailable() {
-    showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) => InfoDialog(
-          title: "Serviço Indisponível",
-          description: "Nenhum motorista está disponível no momento próximo ao local. Tente novamente mais tarde.",
-        ));
-  }
-
-  searchDriver() {
-    if (availableNearbyOnlineDriversList!.isEmpty) {
-      cancelRideRequest();
-      resetAppNow();
-      noDriverAvailable();
-      return;
-    }
-
-    var currentDriver = availableNearbyOnlineDriversList![0];
-
-    // Send notification to current driver -> Selected driver
-    sendNotificationToDriver(currentDriver);
-
-    availableNearbyOnlineDriversList!.removeAt(0);
-  }
-
-  sendNotificationToDriver(OnlineNearbyDrivers currentDriver) {
-    // Update Driver newTripStatus => Assign tripID to current driver
-    DatabaseReference currentDriverRef = FirebaseDatabase.instance
-        .ref()
-        .child("drivers")
-        .child(currentDriver.uidDriver.toString())
-        .child("newTripStatus");
-
-    currentDriverRef.set(tripRequestRef!.key);
-
-    // Get current driver device registrationToken
-    DatabaseReference tokenOfCurrentDriverRef = FirebaseDatabase.instance
-        .ref()
-        .child("drivers")
-        .child(currentDriver.uidDriver.toString())
-        .child("deviceToken");
-
-    tokenOfCurrentDriverRef.once().then((dataSnapshot) {
-      if (dataSnapshot.snapshot.value != null) {
-        String deviceToken = dataSnapshot.snapshot.value.toString();
-        PushNotificationService.sendNotificationToSelectedDriver(
-            deviceToken, context, tripRequestRef!.key.toString());
-      } else {
+    tripStreamSubscription = tripRequestRef!.onValue.listen((eventSnapshot) async
+    {
+      if (eventSnapshot.snapshot.value == null) {
         return;
+      }
+
+      if ((eventSnapshot.snapshot.value as Map)["driverName"] != null) {
+        nameDriver = (eventSnapshot.snapshot.value as Map)["driverName"];
+      }
+
+      if ((eventSnapshot.snapshot.value as Map)["driverPhone"] != null) {
+        phoneNumberDriver =
+        (eventSnapshot.snapshot.value as Map)["driverPhone"];
+      }
+
+      if ((eventSnapshot.snapshot.value as Map)["drivePhoto"] != null) {
+        photoDriver = (eventSnapshot.snapshot.value as Map)["driverPhoto"];
+      }
+
+      if ((eventSnapshot.snapshot.value as Map)["carDetails"] != null) {
+        carDetailsDriver = (eventSnapshot.snapshot.value as Map)["driverName"];
+      }
+
+      if ((eventSnapshot.snapshot.value as Map)["driverLocation"] != null) {
+        double driverLatitude = double.parse(
+            (eventSnapshot.snapshot.value as Map)["driverLocation"]["latitude"]
+                .toString());
+        double driverLongitude = double.parse(
+            (eventSnapshot.snapshot.value as Map)["driverLocation"]["longitude"]
+                .toString());
+        LatLng driverCurrentLocationLatLng = LatLng(
+            driverLatitude, driverLongitude);
+
+        if (status == "accepted") {
+          updateFromDriverCurrentLocationToPickUp(driverCurrentLocationLatLng);
+        }
+        else if (status == "arrived") {
+          setState(() {
+            tripStatusDisplay = "O motorista chegou!";
+          });
+        }
+        else if (status == "onTrip") {
+          updateFromDriverCurrentLocationToDropOffDestination(
+              driverCurrentLocationLatLng);
+        }
+      }
+
+      if(status == "accepted")
+      {
+        displayTripDetailsContainer();
+
+        Geofire.stopListener();
+
+        setState(() {
+          markerSet.removeWhere((element) => element.markerId.value.contains("driver"));
+        });
+      }
+
+      if(status == "ended")
+      {
+        if((eventSnapshot.snapshot.value as Map)["fareAmount"] != null)
+          {
+            double fareAmount = double.parse((eventSnapshot.snapshot.value as Map)["fareAmount"].toString());
+
+            var responseFromPaymentDialog = await showDialog(
+              context: context,
+              builder: (BuildContext context) => PaymentDialog(fareAmount: fareAmount.toString()),
+            );
+
+            if(responseFromPaymentDialog == "paid")
+            {
+              tripRequestRef!.onDisconnect();
+              tripRequestRef = null;
+
+              tripStreamSubscription!.cancel();
+              tripStreamSubscription = null;
+
+              resetAppNow();
+            }
+          }
       }
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    makeDriverNearbyCarIcon();
+  displayTripDetailsContainer()
+  {
+    setState(() {
+      requestContainerHeight = 0;
+      tripContainerHeight = 291;
+      bottomMapPadding = 201;
+    });
+  }
 
-    return Scaffold(
-      key: sKey,
-      drawer: Container(
-        width: 255,
-        color: Colors.black87,
-        child: Drawer(
-          backgroundColor: Colors.white10,
-          child: ListView(
-            children: [
-              const Divider(
-                height: 1,
-                color: Colors.grey,
-                thickness: 1,
-              ),
+  updateFromDriverCurrentLocationToPickUp(driverCurrentLocationLatLng) async
+  {
+    if (!requestingDirectionDetailsInfo) {
+      requestingDirectionDetailsInfo = true;
 
-              //header
-              Container(
-                color: Colors.black54,
-                height: 160,
-                child: DrawerHeader(
-                  decoration: const BoxDecoration(
-                    color: Colors.white10,
-                  ),
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        "assets/images/avatarman.png",
-                        width: 60,
-                        height: 60,
-                      ),
-                      const SizedBox(
-                        width: 16,
-                      ),
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            userName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(
-                            height: 4,
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) => const ProfilePage()),
-                              );
-                            },
-                            child: const Text(
-                              "Profile",
-                              style: TextStyle(
-                                color: Colors.white38,
+      var userPickUpLocationLatLng = LatLng(
+          currentPositionOfUser!.latitude, currentPositionOfUser!.longitude);
+
+      var directionDetailsPickUp = await CommonMethods
+          .getDirectionDetailsFromAPI(
+          driverCurrentLocationLatLng, userPickUpLocationLatLng);
+
+      if (directionDetailsPickUp == null) {
+        return;
+      }
+
+      setState(() {
+        tripStatusDisplay = "Motorista está à caminho - ${directionDetailsPickUp.durationTextString}";
+      });
+
+      requestingDirectionDetailsInfo = false;
+    }
+  }
+
+  updateFromDriverCurrentLocationToDropOffDestination(driverCurrentLocationLatLng) async
+  {
+    if (!requestingDirectionDetailsInfo) {
+      requestingDirectionDetailsInfo = true;
+
+      var dropOffLocation = Provider
+          .of<AppInfo>(context, listen: false)
+          .dropOffLocation;
+      var userDropOffLocationLatLng = LatLng(dropOffLocation!.latitudePosition!,
+          dropOffLocation!.longitudePosition!);
+
+      var directionDetailsPickUp = await CommonMethods
+          .getDirectionDetailsFromAPI(
+          driverCurrentLocationLatLng, userDropOffLocationLatLng);
+
+      if (directionDetailsPickUp == null) {
+        return;
+      }
+
+      setState(() {
+        tripStatusDisplay =
+        "Motorista ao destino - ${directionDetailsPickUp.durationTextString}";
+      });
+
+      requestingDirectionDetailsInfo = false;
+    }
+  }
+
+  noDriverAvailable() {
+      showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) =>
+              InfoDialog(
+                title: "Serviço Indisponível",
+                description: "Nenhum motorista está disponível no momento próximo ao local. Tente novamente mais tarde.",
+              ));
+  }
+
+  searchDriver() {
+      if (availableNearbyOnlineDriversList!.isEmpty) {
+        cancelRideRequest();
+        resetAppNow();
+        noDriverAvailable();
+        return;
+      }
+
+      var currentDriver = availableNearbyOnlineDriversList![0];
+
+      // Send notification to current driver -> Selected driver
+      sendNotificationToDriver(currentDriver);
+
+      availableNearbyOnlineDriversList!.removeAt(0);
+  }
+
+  sendNotificationToDriver(OnlineNearbyDrivers currentDriver) {
+      // Update Driver newTripStatus => Assign tripID to current driver
+      DatabaseReference currentDriverRef = FirebaseDatabase.instance
+          .ref()
+          .child("drivers")
+          .child(currentDriver.uidDriver.toString())
+          .child("newTripStatus");
+
+      currentDriverRef.set(tripRequestRef!.key);
+
+      // Get current driver device registrationToken
+      DatabaseReference tokenOfCurrentDriverRef = FirebaseDatabase.instance
+          .ref()
+          .child("drivers")
+          .child(currentDriver.uidDriver.toString())
+          .child("deviceToken");
+
+      tokenOfCurrentDriverRef.once().then((dataSnapshot) {
+        if (dataSnapshot.snapshot.value != null) {
+          String deviceToken = dataSnapshot.snapshot.value.toString();
+          PushNotificationService.sendNotificationToSelectedDriver(
+              deviceToken, context, tripRequestRef!.key.toString());
+        } else {
+          return;
+        }
+
+        const oneTickPerSec = Duration(seconds: 1);
+
+        var timerCountDown = Timer.periodic(oneTickPerSec, (timer) {
+          requestTimeoutDriver = requestTimeoutDriver - 1;
+
+          if (stateOfApp != "requesting") {
+            timer.cancel();
+            currentDriverRef.set("cancelled");
+            currentDriverRef.onDisconnect();
+            requestTimeoutDriver = 20;
+          }
+
+          currentDriverRef.onValue.listen((event) {
+            if (dataSnapshot.snapshot.value.toString() == "accepted") {
+              timer.cancel();
+              currentDriverRef.onDisconnect();
+              requestTimeoutDriver = 20;
+            }
+          });
+
+          if (requestTimeoutDriver == 0) {
+            currentDriverRef.set("timeout");
+            timer.cancel();
+            currentDriverRef.onDisconnect();
+            requestTimeoutDriver = 20;
+
+            searchDriver();
+          }
+        });
+      });
+    }
+
+    @override
+    Widget build(BuildContext context) {
+      makeDriverNearbyCarIcon();
+
+      return Scaffold(
+        key: sKey,
+
+        drawer: Container(
+          width: 255,
+          color: Colors.black87,
+          child: Drawer(
+            backgroundColor: Colors.white10,
+            child: ListView(
+              children: [
+                const Divider(
+                  height: 1,
+                  color: Colors.grey,
+                  thickness: 1,
+                ),
+
+                //header
+                Container(
+                  color: Colors.black54,
+                  height: 160,
+                  child: DrawerHeader(
+                    decoration: const BoxDecoration(
+                      color: Colors.white10,
+                    ),
+                    child: Row(
+                      children: [
+                        Image.asset(
+                          "assets/images/avatarman.png",
+                          width: 60,
+                          height: 60,
+                        ),
+                        const SizedBox(
+                          width: 16,
+                        ),
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              userName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const Divider(
-                height: 1,
-                color: Colors.grey,
-                thickness: 1,
-              ),
-
-              const SizedBox(
-                height: 10,
-              ),
-
-              //body
-              ListTile(
-                leading: IconButton(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons.info,
-                    color: Colors.grey,
-                  ),
-                ),
-                title: const Text(
-                  "About",
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-
-              GestureDetector(
-                onTap: () {
-                  FirebaseAuth.instance.signOut();
-
-                  Navigator.push(context, MaterialPageRoute(builder: (c) => const LoginScreen()));
-                },
-                child: ListTile(
-                  leading: IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.logout,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  title: const Text(
-                    "Logout",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      body: Stack(
-        children: [
-          ///google map
-          GoogleMap(
-            padding: EdgeInsets.only(top: 26, bottom: bottomMapPadding),
-            mapType: MapType.normal,
-            myLocationEnabled: true,
-            polylines: polylineSet,
-            markers: markerSet,
-            circles: circleSet,
-            initialCameraPosition: googlePlexInitialPosition,
-            onMapCreated: (GoogleMapController mapController) {
-              controllerGoogleMap = mapController;
-              updateMapTheme(controllerGoogleMap!);
-
-              googleMapCompleterController.complete(controllerGoogleMap);
-
-              setState(() {
-                bottomMapPadding = 300;
-              });
-
-              getCurrentLiveLocationOfUser();
-            },
-          ),
-
-          ///drawer button
-          Positioned(
-            top: 36,
-            left: 19,
-            child: GestureDetector(
-              onTap: () {
-                if (isDrawerOpened == true) {
-                  sKey.currentState!.openDrawer();
-                } else {
-                  resetAppNow();
-                }
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 5,
-                      spreadRadius: 0.5,
-                      offset: Offset(0.7, 0.7),
-                    ),
-                  ],
-                ),
-                child: CircleAvatar(
-                  backgroundColor: Colors.grey,
-                  radius: 20,
-                  child: Icon(
-                    isDrawerOpened == true ? Icons.menu : Icons.close,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          ///buttons container
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              height: 250, // Aumente a altura conforme necessário
-              color: Colors.black.withOpacity(0.8),
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-              child: Column(
-                children: [
-                  // Barra de pesquisa
-                  GestureDetector(
-                    onTap: () async {
-                      var responseFromSearchPage = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (c) => const SearchDestinationPage()));
-                      if (responseFromSearchPage == "placeSelected") {
-                        displayUserRideDetailsContainer();
-                      }
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          children: const [
-                            Icon(Icons.search, color: Colors.grey),
-                            SizedBox(width: 10),
-                            Text(
-                              "Qual o destino?",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 18,
+                            const SizedBox(
+                              height: 4,
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (
+                                          context) => const ProfilePage()),
+                                );
+                              },
+                              child: const Text(
+                                "Profile",
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ),
+                      ],
                     ),
                   ),
+                ),
 
-                  const SizedBox(height: 20),
+                const Divider(
+                  height: 1,
+                  color: Colors.grey,
+                  thickness: 1,
+                ),
 
-                  // Botões de agendamento e trabalho
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      // Botão de agendamento
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (c) =>
-                                    const DestinationSearchPage())); // Chama a nova página de busca
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(5)),
-                            padding: const EdgeInsets.all(20),
-                          ),
-                          child: const Icon(
-                            Icons.calendar_today,
-                            color: Colors.white,
-                            size: 25,
-                          ),
-                        ),
+                const SizedBox(
+                  height: 10,
+                ),
+
+                //body
+                GestureDetector(
+                  onTap: ()
+                  {
+                    Navigator.push(context, MaterialPageRoute(builder: (c)=> AboutPage()));
+                  },
+                  child: ListTile(
+                    leading: IconButton(
+                      onPressed: () {},
+                      icon: const Icon(
+                        Icons.info,
+                        color: Colors.grey,
                       ),
-                      const SizedBox(width: 10),
-                      // Botão de trabalho
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {},
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(5)),
-                            padding: const EdgeInsets.all(20),
-                          ),
-                          child: const Icon(
-                            Icons.work,
-                            color: Colors.white,
-                            size: 25,
-                          ),
-                        ),
+                    ),
+                    title: const Text(
+                      "About",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ),
+
+                GestureDetector(
+                  onTap: () {
+                    FirebaseAuth.instance.signOut();
+
+                    Navigator.push(context,
+                        MaterialPageRoute(builder: (c) => const LoginScreen()));
+                  },
+                  child: ListTile(
+                    leading: IconButton(
+                      onPressed: () {},
+                      icon: const Icon(
+                        Icons.logout,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    title: const Text(
+                      "Logout",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        body: Stack(
+          children: [
+
+            ///google map
+            GoogleMap(
+              padding: EdgeInsets.only(top: 26, bottom: bottomMapPadding),
+              mapType: MapType.normal,
+              myLocationEnabled: true,
+              polylines: polylineSet,
+              markers: markerSet,
+              circles: circleSet,
+              initialCameraPosition: googlePlexInitialPosition,
+              onMapCreated: (GoogleMapController mapController) {
+                controllerGoogleMap = mapController;
+                updateMapTheme(controllerGoogleMap!);
+
+                googleMapCompleterController.complete(controllerGoogleMap);
+
+                setState(() {
+                  bottomMapPadding = 300;
+                });
+
+                getCurrentLiveLocationOfUser();
+              },
+            ),
+
+            ///drawer button
+            Positioned(
+              top: 36,
+              left: 19,
+              child: GestureDetector(
+                onTap: () {
+                  if (isDrawerOpened == true) {
+                    sKey.currentState!.openDrawer();
+                  } else {
+                    resetAppNow();
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 5,
+                        spreadRadius: 0.5,
+                        offset: Offset(0.7, 0.7),
                       ),
                     ],
                   ),
-                ],
+                  child: CircleAvatar(
+                    backgroundColor: Colors.grey,
+                    radius: 20,
+                    child: Icon(
+                      isDrawerOpened == true ? Icons.menu : Icons.close,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
 
-          ///ride details container
-          if (rideDetailsContainerHeight > 0)
+            ///buttons container
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: Container(
-                height: rideDetailsContainerHeight,
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.only(topLeft: Radius.circular(5), topRight: Radius.circular(5)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white,
-                      blurRadius: 0.0,
-                      spreadRadius: 0.0
+                height: 250, // Aumente a altura conforme necessário
+                color: Colors.black.withOpacity(0.8),
+                padding: const EdgeInsets.symmetric(
+                    vertical: 20, horizontal: 20),
+                child: Column(
+                  children: [
+                    // Barra de pesquisa
+                    GestureDetector(
+                      onTap: () async {
+                        var responseFromSearchPage = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (c) => const SearchDestinationPage()));
+                        if (responseFromSearchPage == "placeSelected") {
+                          displayUserRideDetailsContainer();
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: const [
+                              Icon(Icons.search, color: Colors.grey),
+                              SizedBox(width: 10),
+                              Text(
+                                "Qual o destino?",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Botões de agendamento e trabalho
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        // Botão de agendamento
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (c) =>
+                                      const DestinationSearchPage())); // Chama a nova página de busca
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(5)),
+                              padding: const EdgeInsets.all(20),
+                            ),
+                            child: const Icon(
+                              Icons.calendar_today,
+                              color: Colors.white,
+                              size: 25,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Botão de trabalho
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {},
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(5)),
+                              padding: const EdgeInsets.all(20),
+                            ),
+                            child: const Icon(
+                              Icons.work,
+                              color: Colors.white,
+                              size: 25,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(left: 16, right: 16),
-                          child: SizedBox(
-                            height: 220,
-                            child: Card(
-                              elevation: 10,
-                              child: Container(
-                                width: MediaQuery.of(context).size.width * .70,
-                                color: Colors.black45,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 8, bottom: 8),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 8, right: 8),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              (tripDirectionDetailsInfo != null) ? tripDirectionDetailsInfo!.distanceTextString! : "",
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                color: Colors.white70,
-                                                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            ///ride details container
+            if (rideDetailsContainerHeight > 0)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: rideDetailsContainerHeight,
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.only(topLeft: Radius.circular(5),
+                        topRight: Radius.circular(5)),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.white,
+                          blurRadius: 0.0,
+                          spreadRadius: 0.0
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16, right: 16),
+                            child: SizedBox(
+                              height: 220,
+                              child: Card(
+                                elevation: 10,
+                                child: Container(
+                                  width: MediaQuery
+                                      .of(context)
+                                      .size
+                                      .width * .70,
+                                  color: Colors.black45,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                        top: 8, bottom: 8),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment
+                                          .center,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                              left: 8, right: 8),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment
+                                                .spaceBetween,
+                                            children: [
+                                              Text(
+                                                (tripDirectionDetailsInfo !=
+                                                    null)
+                                                    ? tripDirectionDetailsInfo!
+                                                    .distanceTextString!
+                                                    : "",
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  color: Colors.white70,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
-                                            ),
-                                            Text(
-                                              (tripDirectionDetailsInfo != null) ? tripDirectionDetailsInfo!.durationTextString! : "",
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                color: Colors.white70,
-                                                fontWeight: FontWeight.bold,
+                                              Text(
+                                                (tripDirectionDetailsInfo !=
+                                                    null)
+                                                    ? tripDirectionDetailsInfo!
+                                                    .durationTextString!
+                                                    : "",
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  color: Colors.white70,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            stateOfApp = "requesting";
-                                          });
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              stateOfApp = "requesting";
+                                            });
 
-                                          displayRequestContainer();
+                                            displayRequestContainer();
 
-                                          //get nearest available online drivers
-                                          availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
+                                            //get nearest available online drivers
+                                            availableNearbyOnlineDriversList =
+                                                ManageDriversMethods
+                                                    .nearbyOnlineDriversList;
 
-                                          //search driver
-                                          searchDriver();
-                                        },
-                                        child: Image.asset(
-                                          "assets/images/uberexec.png",
-                                          height: 122,
-                                          width: 122,
+                                            //search driver
+                                            searchDriver();
+                                          },
+                                          child: Image.asset(
+                                            "assets/images/uberexec.png",
+                                            height: 122,
+                                            width: 122,
+                                          ),
                                         ),
-                                      ),
-                                      Text(
-                                        (tripDirectionDetailsInfo != null)
-                                            ? "\$ ${(cMethods.calculateFareAmount(tripDirectionDetailsInfo!)).toString()}"
-                                            : "",
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          color: Colors.white70,
-                                          fontWeight: FontWeight.bold,
+                                        Text(
+                                          (tripDirectionDetailsInfo != null)
+                                              ? "\$ ${(cMethods
+                                              .calculateFareAmount(
+                                              tripDirectionDetailsInfo!))
+                                              .toString()}"
+                                              : "",
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            color: Colors.white70,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            ///request container
+            if (requestContainerHeight > 0)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: requestContainerHeight,
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white,
+                        blurRadius: 15.0,
+                        spreadRadius: 0.5,
+                        offset: Offset(
+                          0.7,
+                          0.7,
+                        ),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(
+                          height: 12,
+                        ),
+                        SizedBox(
+                          width: 200,
+                          child: LoadingAnimationWidget.flickr(
+                            leftDotColor: Colors.blueAccent,
+                            rightDotColor: Colors.red,
+                            size: 50,
+                          ),
+                        ),
+                        const SizedBox(
+                          height: 20,
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            resetAppNow();
+                            cancelRideRequest();
+                          },
+                          child: Container(
+                            height: 50,
+                            width: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.white70,
+                              borderRadius: BorderRadius.circular(25),
+                              border: Border.all(
+                                  width: 1.5, color: Colors.grey),
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.black,
+                              size: 25,
                             ),
                           ),
                         ),
@@ -899,22 +1240,22 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-            ),
 
-          ///request container
-          if (requestContainerHeight > 0)
+            ///trip details container
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: Container(
-                height: requestContainerHeight,
+                height: tripContainerHeight,
                 decoration: const BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.white,
+                      color: Colors.white24,
                       blurRadius: 15.0,
                       spreadRadius: 0.5,
                       offset: Offset(
@@ -925,51 +1266,124 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(
-                        height: 12,
-                      ),
-                      SizedBox(
-                        width: 200,
-                        child: LoadingAnimationWidget.flickr(
-                          leftDotColor: Colors.blueAccent,
-                          rightDotColor: Colors.red,
-                          size: 50,
-                        ),
-                      ),
-                      const SizedBox(
-                        height: 20,
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          resetAppNow();
-                          cancelRideRequest();
-                        },
-                        child: Container(
-                          height: 50,
-                          width: 50,
-                          decoration: BoxDecoration(
-                            color: Colors.white70,
-                            borderRadius: BorderRadius.circular(25),
-                            border: Border.all(width: 1.5, color: Colors.grey),
+                      const SizedBox(height: 5),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            tripStatusDisplay,
+                            style: const TextStyle(fontSize: 19, color: Colors.grey),
                           ),
-                          child: const Icon(
-                            Icons.close,
-                            color: Colors.black,
-                            size: 25,
+                        ],
+                      ),
+
+
+                      const SizedBox(height: 19,),
+
+                      const Divider(
+                        height: 1,
+                        color: Colors.white70,
+                        thickness: 1,
+                      ),
+
+                      const SizedBox(height: 19,),
+
+                      //image - driver name and driver car details
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+
+                          ClipOval(
+                            child: Image.network(
+                              photoDriver == ''
+                                  ? "https://firebasestorage.googleapis.com/v0/b/flutter-uber-clone-f49e2.appspot.com/o/avatarman.png?alt=media&token=39a4cc1e-6d96-4c4d-80d3-e8dc99505d73"
+                                  : photoDriver,
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                        ),
+
+                          const SizedBox(width: 8,),
+
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+
+                              Text(nameDriver, style: const TextStyle(fontSize: 20, color: Colors.grey,),),
+
+                              Text(carDetailsDriver, style: const TextStyle(fontSize: 14, color: Colors.grey,),),
+                            ],
+                          ),
+
+                        ],
+                      ),
+
+                      const SizedBox(height: 19,),
+
+                      const Divider(
+                        height: 1,
+                        color: Colors.white70,
+                        thickness: 1,
+                      ),
+
+                      const SizedBox(height: 19,),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+
+                          GestureDetector(
+                            onTap: ()
+                            {
+                              launchUrl(Uri.parse("tel://$phoneNumberDriver"));
+                            },
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+
+                                Container(
+                                  height: 50,
+                                  width: 50,
+                                  decoration: BoxDecoration(
+                                    borderRadius: const BorderRadius.all(Radius.circular(25)),
+                                    border: Border.all(
+                                      width: 1,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.phone,
+                                    color: Colors.white,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 11,),
+
+                                const Text("Call", style: TextStyle(color: Colors.grey,),),
+
+                              ],
+                            ),
+                          ),
+
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ),
+
+
+              )
             ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    }
   }
-}
+
