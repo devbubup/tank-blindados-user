@@ -833,10 +833,7 @@ class _HomePageState extends State<HomePage> {
 
                 //body
                 GestureDetector(
-                  onTap: ()
-                  {
-                    Navigator.push(context, MaterialPageRoute(builder: (c)=> AboutPage()));
-                  },
+                  
                   child: ListTile(
                     leading: IconButton(
                       onPressed: () {},
