@@ -52,8 +52,6 @@ dependencies:
   googleapis_auth:
   intl:
   flutter_datetime_picker:
-  restart_app:
-  url_launcher:
 
 dev_dependencies:
   flutter_test:
