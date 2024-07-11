@@ -7,12 +7,13 @@ import 'package:users_app/models/address_model.dart';
 import 'package:users_app/models/prediction_model.dart';
 import 'package:users_app/widgets/info_dialog.dart';
 import 'package:users_app/widgets/loading_dialog.dart';
+import 'package:users_app/models/regions.dart';
 
 class PredictionPlaceUI extends StatefulWidget {
   final PredictionModel? predictedPlaceData;
-  final bool Function(double, double) isInZonaOesteCallback;
+  final bool Function(double, double) isInPermittedRegionCallback;
 
-  PredictionPlaceUI({super.key, this.predictedPlaceData, required this.isInZonaOesteCallback});
+  PredictionPlaceUI({super.key, this.predictedPlaceData, required this.isInPermittedRegionCallback});
 
   @override
   State<PredictionPlaceUI> createState() => _PredictionPlaceUIState();
@@ -41,7 +42,7 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
       double latitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
       double longitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
 
-      if (widget.isInZonaOesteCallback(latitude, longitude)) {
+      if (!widget.isInPermittedRegionCallback(latitude, longitude)) {
         showDialog(
           context: context,
           builder: (BuildContext context) => InfoDialog(

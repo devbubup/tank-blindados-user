@@ -1,3 +1,4 @@
+// search_destination_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:users_app/global/global_var.dart';
@@ -8,6 +9,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../appInfo/app_info.dart';
 import '../widgets/info_dialog.dart';
+import 'package:users_app/models/regions.dart'; // Importar o arquivo regions
 
 class SearchDestinationPage extends StatefulWidget {
   const SearchDestinationPage({super.key});
@@ -21,7 +23,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
   TextEditingController destinationTextEditingController = TextEditingController();
   List<PredictionModel> dropOffPredictionsPlacesList = [];
 
-  ///Places API - Place AutoComplete
   searchLocation(String locationName) async {
     if (locationName.length > 1) {
       String apiPlacesUrl = "https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$locationName&key=$googleMapKey&components=country:br";
@@ -43,30 +44,10 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
     }
   }
 
-  /// Verificar se o local está na Zona Oeste
-  bool isInZonaOeste(double latitude, double longitude) {
-    List<LatLng> zonaOestePolygon = [
-      LatLng(-23.0, -43.6),
-      LatLng(-23.0, -43.2),
-      LatLng(-22.7, -43.2),
-      LatLng(-22.7, -43.6),
-    ];
-
-    bool isInPolygon = false;
-    int j = zonaOestePolygon.length - 1;
-
-    for (int i = 0; i < zonaOestePolygon.length; i++) {
-      if ((zonaOestePolygon[i].longitude > longitude) != (zonaOestePolygon[j].longitude > longitude) &&
-          (latitude < (zonaOestePolygon[j].latitude - zonaOestePolygon[i].latitude) * (longitude - zonaOestePolygon[i].longitude) / (zonaOestePolygon[j].longitude - zonaOestePolygon[i].longitude) + zonaOestePolygon[i].latitude)) {
-        isInPolygon = !isInPolygon;
-      }
-      j = i;
-    }
-
-    return isInPolygon;
+  bool isInPermittedRegion(double latitude, double longitude) {
+    return Regions.isInPermittedRegions(latitude, longitude);
   }
 
-  /// Verificação do endereço de partida
   void checkPickUpLocation() async {
     String pickUpPlaceID = pickUpTextEditingController.text;
 
@@ -82,7 +63,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
       double latitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
       double longitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
 
-      if (isInZonaOeste(latitude, longitude)) {
+      if (!isInPermittedRegion(latitude, longitude)) {
         showDialog(
           context: context,
           builder: (BuildContext context) => InfoDialog(
@@ -124,7 +105,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                     children: [
                       const SizedBox(height: 6,),
 
-                      //icon button - title
                       Stack(
                         children: [
                           GestureDetector(
@@ -147,7 +127,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
 
                       const SizedBox(height: 18,),
 
-                      //pickup text field
                       Row(
                         children: [
                           Image.asset(
@@ -167,7 +146,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                                 child: TextField(
                                   controller: pickUpTextEditingController,
                                   onChanged: (inputText) {
-                                    // Chama a verificação do endereço de partida
                                     checkPickUpLocation();
                                   },
                                   decoration: const InputDecoration(
@@ -187,7 +165,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
 
                       const SizedBox(height: 11,),
 
-                      //destination text field
                       Row(
                         children: [
                           Image.asset(
@@ -229,7 +206,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
               ),
             ),
 
-            //display prediction results for destination place
             (dropOffPredictionsPlacesList.length > 0)
                 ? Padding(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -240,7 +216,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                     elevation: 3,
                     child: PredictionPlaceUI(
                       predictedPlaceData: dropOffPredictionsPlacesList[index],
-                      isInZonaOesteCallback: isInZonaOeste, // Passa a função de verificação
+                      isInPermittedRegionCallback: isInPermittedRegion,
                     ),
                   );
                 },

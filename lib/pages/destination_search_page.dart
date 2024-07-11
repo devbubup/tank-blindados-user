@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:users_app/global/global_var.dart';
 import 'package:users_app/methods/common_methods.dart';
 import 'package:users_app/models/prediction_model.dart';
-import 'trip_configuration_page.dart';
+import 'package:users_app/pages/trip_configuration_page.dart';
+import '../appInfo/app_info.dart';
+import '../widgets/info_dialog.dart';
+import 'package:users_app/models/regions.dart';
 
 class DestinationSearchPage extends StatefulWidget {
   const DestinationSearchPage({super.key});
@@ -41,6 +44,76 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
           } else {
             dropOffPredictionsPlacesList = predictionsList;
           }
+        });
+      }
+    }
+  }
+
+  bool isInPermittedRegion(double latitude, double longitude) {
+    return Regions.isInPermittedRegions(latitude, longitude);
+  }
+
+  /// Verificação do endereço de partida
+  void checkPickUpLocation(String placeID) async {
+    String urlPlaceDetailsAPI = "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeID&key=$googleMapKey";
+
+    var responseFromPlaceDetailsAPI = await CommonMethods.sendRequestToAPI(urlPlaceDetailsAPI);
+
+    if (responseFromPlaceDetailsAPI == "error") {
+      return;
+    }
+
+    if (responseFromPlaceDetailsAPI["status"] == "OK") {
+      double latitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
+      double longitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
+
+      if (!isInPermittedRegion(latitude, longitude)) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) => InfoDialog(
+            title: "Região Indisponível",
+            description: "Os motoristas da empresa não trabalham no endereço selecionado como partida.",
+          ),
+        );
+      } else {
+        setState(() {
+          pickUpPlaceName = responseFromPlaceDetailsAPI["result"]["name"];
+          pickUpTextEditingController.text = pickUpPlaceName!;
+          pickUpPredictionsPlacesList.clear();
+          checkIfBothLocationsSelected();
+        });
+      }
+    }
+  }
+
+  /// Verificação do endereço de destino
+  void checkDestinationLocation(String placeID) async {
+    String urlPlaceDetailsAPI = "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeID&key=$googleMapKey";
+
+    var responseFromPlaceDetailsAPI = await CommonMethods.sendRequestToAPI(urlPlaceDetailsAPI);
+
+    if (responseFromPlaceDetailsAPI == "error") {
+      return;
+    }
+
+    if (responseFromPlaceDetailsAPI["status"] == "OK") {
+      double latitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
+      double longitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
+
+      if (!isInPermittedRegion(latitude, longitude)) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) => InfoDialog(
+            title: "Região Indisponível",
+            description: "Os motoristas da empresa não trabalham no endereço selecionado como destino.",
+          ),
+        );
+      } else {
+        setState(() {
+          destinationPlaceName = responseFromPlaceDetailsAPI["result"]["name"];
+          destinationTextEditingController.text = destinationPlaceName!;
+          dropOffPredictionsPlacesList.clear();
+          checkIfBothLocationsSelected();
         });
       }
     }
@@ -204,12 +277,7 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
                       title: Text(pickUpPredictionsPlacesList[index].main_text!),
                       subtitle: Text(pickUpPredictionsPlacesList[index].secondary_text!),
                       onTap: () {
-                        setState(() {
-                          pickUpTextEditingController.text = pickUpPredictionsPlacesList[index].main_text!;
-                          pickUpPlaceName = pickUpPredictionsPlacesList[index].main_text;
-                          pickUpPredictionsPlacesList = [];
-                          checkIfBothLocationsSelected();
-                        });
+                        checkPickUpLocation(pickUpPredictionsPlacesList[index].place_id!);
                       },
                     ),
                   );
@@ -235,12 +303,7 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
                       title: Text(dropOffPredictionsPlacesList[index].main_text!),
                       subtitle: Text(dropOffPredictionsPlacesList[index].secondary_text!),
                       onTap: () {
-                        setState(() {
-                          destinationTextEditingController.text = dropOffPredictionsPlacesList[index].main_text!;
-                          destinationPlaceName = dropOffPredictionsPlacesList[index].main_text;
-                          dropOffPredictionsPlacesList = [];
-                          checkIfBothLocationsSelected();
-                        });
+                        checkDestinationLocation(dropOffPredictionsPlacesList[index].place_id!);
                       },
                     ),
                   );

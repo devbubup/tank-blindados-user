@@ -1,3 +1,4 @@
+// prediction_place_ui.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:users_app/appInfo/app_info.dart';
@@ -7,19 +8,19 @@ import 'package:users_app/models/address_model.dart';
 import 'package:users_app/models/prediction_model.dart';
 import 'package:users_app/widgets/info_dialog.dart';
 import 'package:users_app/widgets/loading_dialog.dart';
+import 'package:users_app/models/regions.dart'; // Importar o arquivo regions
 
 class PredictionPlaceUI extends StatefulWidget {
   final PredictionModel? predictedPlaceData;
-  final bool Function(double, double) isInZonaOesteCallback;
+  final bool Function(double, double) isInPermittedRegionCallback;
 
-  PredictionPlaceUI({super.key, this.predictedPlaceData, required this.isInZonaOesteCallback});
+  PredictionPlaceUI({super.key, this.predictedPlaceData, required this.isInPermittedRegionCallback});
 
   @override
   State<PredictionPlaceUI> createState() => _PredictionPlaceUIState();
 }
 
 class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
-  ///Place Details - Places API
   fetchClickedPlaceDetails(String placeID) async {
     showDialog(
       barrierDismissible: false,
@@ -41,7 +42,7 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
       double latitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lat"];
       double longitude = responseFromPlaceDetailsAPI["result"]["geometry"]["location"]["lng"];
 
-      if (widget.isInZonaOesteCallback(latitude, longitude)) {
+      if (!widget.isInPermittedRegionCallback(latitude, longitude)) {
         showDialog(
           context: context,
           builder: (BuildContext context) => InfoDialog(
@@ -72,7 +73,7 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey[800],  // Alterado para cinza escuro
+          color: Colors.grey[800],
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: Colors.grey),
         ),
@@ -86,7 +87,7 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 16,
-                color: Colors.white,  // Texto em branco para contraste
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 4),
@@ -95,7 +96,7 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 14,
-                color: Colors.white70,  // Texto em branco com opacidade
+                color: Colors.white70,
               ),
             ),
           ],
