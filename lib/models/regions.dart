@@ -1,6 +1,13 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class Regions {
+  static List<LatLng> rioDeJaneiroBoundingPolygon = [
+    LatLng(-22.768, -43.795),  // Define the bounding box for Rio de Janeiro city
+    LatLng(-23.077, -43.795),
+    LatLng(-23.077, -43.107),
+    LatLng(-22.768, -43.107),
+  ];
+
   static List<LatLng> barraDaTijucaPolygon = [
     LatLng(-22.990, -43.370),
     LatLng(-23.010, -43.240),
@@ -13,7 +20,6 @@ class Regions {
     LatLng(-23.000, -43.500),
     LatLng(-23.050, -43.470),
     LatLng(-23.070, -43.500),
-    LatLng(-23.000, -43.500),
     LatLng(-23.000, -43.500),
   ];
 
@@ -130,7 +136,8 @@ class Regions {
   ];
 
   static bool isInPermittedRegions(double latitude, double longitude) {
-    return isInPolygon(barraDaTijucaPolygon, latitude, longitude) ||
+    bool inRioDeJaneiro = isInPolygon(rioDeJaneiroBoundingPolygon, latitude, longitude);
+    bool inPermittedZones = isInPolygon(barraDaTijucaPolygon, latitude, longitude) ||
         isInPolygon(recreioPolygon, latitude, longitude) ||
         isInPolygon(centroPolygon, latitude, longitude) ||
         isInPolygon(galeaoPolygon, latitude, longitude) ||
@@ -146,6 +153,9 @@ class Regions {
         isInPolygon(lemePolygon, latitude, longitude) ||
         isInPolygon(saoConradoPolygon, latitude, longitude) ||
         isInPolygon(leblonPolygon, latitude, longitude);
+
+    // Allow if outside Rio de Janeiro city or within permitted zones
+    return !inRioDeJaneiro || inPermittedZones;
   }
 
   static bool isInPolygon(List<LatLng> polygon, double latitude, double longitude) {
