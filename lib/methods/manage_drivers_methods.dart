@@ -1,24 +1,27 @@
 import 'package:users_app/models/online_nearby_drivers.dart';
 
-class ManageDriversMethods
-{
+class ManageDriversMethods {
   static List<OnlineNearbyDrivers> nearbyOnlineDriversList = [];
 
-  static void removeDriverFromList(String driverID)
-  {
-    int index = nearbyOnlineDriversList.indexWhere((driver) => driver.uidDriver == driverID);
-
-    if(nearbyOnlineDriversList.length > 0)
-    {
+  static void removeDriverFromList(String key) {
+    int index = nearbyOnlineDriversList.indexWhere((driver) => driver.uidDriver == key);
+    if (index != -1) {
       nearbyOnlineDriversList.removeAt(index);
     }
   }
 
-  static void updateOnlineNearbyDriversLocation(OnlineNearbyDrivers nearbyOnlineDriverInformation)
-  {
-    int index = nearbyOnlineDriversList.indexWhere((driver) => driver.uidDriver == nearbyOnlineDriverInformation.uidDriver);
+  static void updateOnlineNearbyDriversLocation(OnlineNearbyDrivers driver) {
+    int index = nearbyOnlineDriversList.indexWhere((d) => d.uidDriver == driver.uidDriver);
+    if (index != -1) {
+      nearbyOnlineDriversList[index].latDriver = driver.latDriver;
+      nearbyOnlineDriversList[index].lngDriver = driver.lngDriver;
+    }
+  }
 
-    nearbyOnlineDriversList[index].latDriver = nearbyOnlineDriverInformation.latDriver;
-    nearbyOnlineDriversList[index].lngDriver = nearbyOnlineDriverInformation.lngDriver;
+  static OnlineNearbyDrivers? getNearestDriver() {
+    if (nearbyOnlineDriversList.isNotEmpty) {
+      return nearbyOnlineDriversList.first;
+    }
+    return null;
   }
 }

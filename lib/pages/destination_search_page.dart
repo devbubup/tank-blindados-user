@@ -142,7 +142,7 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
             Card(
               elevation: 10,
               child: Container(
-                height: 230,
+                height: 250,
                 decoration: const BoxDecoration(
                   color: Colors.black12,
                   boxShadow: [
@@ -267,7 +267,7 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
             //display prediction results for pickup place
             (pickUpPredictionsPlacesList.isNotEmpty)
                 ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 16),
               child: ListView.separated(
                 padding: const EdgeInsets.all(0),
                 itemBuilder: (context, index) {
@@ -293,7 +293,7 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
             //display prediction results for destination place
             (dropOffPredictionsPlacesList.isNotEmpty)
                 ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 16),
               child: ListView.separated(
                 padding: const EdgeInsets.all(0),
                 itemBuilder: (context, index) {

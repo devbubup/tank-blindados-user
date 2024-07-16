@@ -102,17 +102,50 @@ class CommonMethods
     return detailsModel;
   }
 
-  calculateFareAmount(DirectionDetails directionDetails)
-  {
-    double distancePerKmAmount = 0.4;
+  double calculateFareAmount(
+      DirectionDetails directionDetails, String serviceType) {
+    double distancePerKmAmount;
     double durationPerMinuteAmount = 0.3;
-    double baseFareAmount = 2;
+    double baseFareAmount;
 
-    double totalDistanceTravelFareAmount = (directionDetails.distanceValueDigits! / 1000) * distancePerKmAmount;
-    double totalDurationSpendFareAmount = (directionDetails.durationValueDigits! / 60) * durationPerMinuteAmount;
+    switch (serviceType) {
+      case 'Sedan Exec.':
+        distancePerKmAmount = 0.5;
+        baseFareAmount = 3;
+        break;
+      case 'Sedan Prime':
+        distancePerKmAmount = 0.6;
+        baseFareAmount = 4;
+        break;
+      case 'SUV Especial':
+        distancePerKmAmount = 0.7;
+        baseFareAmount = 5;
+        break;
+      case 'SUV Prime':
+        distancePerKmAmount = 0.8;
+        baseFareAmount = 6;
+        break;
+      case 'Mini Van':
+        distancePerKmAmount = 0.9;
+        baseFareAmount = 7;
+        break;
+      case 'Van':
+        distancePerKmAmount = 1.0;
+        baseFareAmount = 8;
+        break;
+      default:
+        distancePerKmAmount = 0.4;
+        baseFareAmount = 2;
+    }
 
-    double overAllTotalFareAmount = baseFareAmount + totalDistanceTravelFareAmount + totalDurationSpendFareAmount;
+    double totalDistanceTravelFareAmount =
+        (directionDetails.distanceValueDigits! / 1000) * distancePerKmAmount;
+    double totalDurationSpendFareAmount =
+        (directionDetails.durationValueDigits! / 60) * durationPerMinuteAmount;
 
-    return overAllTotalFareAmount.toStringAsFixed(1);
+    double overAllTotalFareAmount =
+        baseFareAmount + totalDistanceTravelFareAmount + totalDurationSpendFareAmount;
+
+    return overAllTotalFareAmount;
   }
 }

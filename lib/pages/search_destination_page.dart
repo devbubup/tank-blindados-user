@@ -86,7 +86,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
             Card(
               elevation: 10,
               child: Container(
-                height: 230,
+                height: 250,
                 decoration: const BoxDecoration(
                   color: Colors.black12,
                   boxShadow: [
