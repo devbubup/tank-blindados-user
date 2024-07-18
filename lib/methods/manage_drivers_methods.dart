@@ -18,9 +18,13 @@ class ManageDriversMethods {
     }
   }
 
-  static OnlineNearbyDrivers? getNearestDriver() {
+  static OnlineNearbyDrivers? getNearestDriver(String selectedServiceType) {
     if (nearbyOnlineDriversList.isNotEmpty) {
-      return nearbyOnlineDriversList.first;
+      try {
+        return nearbyOnlineDriversList.firstWhere((driver) => driver.serviceType == selectedServiceType);
+      } catch (e) {
+        return null;
+      }
     }
     return null;
   }

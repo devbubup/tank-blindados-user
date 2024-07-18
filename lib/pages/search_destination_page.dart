@@ -114,10 +114,10 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                           ),
                           const Center(
                             child: Text(
-                              "Selecione um destino",
+                              'Selecione um Destino',
                               style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 20,
                               ),
                             ),
                           ),

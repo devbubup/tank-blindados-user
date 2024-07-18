@@ -171,12 +171,12 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
                           ),
                           const Center(
                             child: Text(
-                              "Selecione um destino",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            'Agendamento de Corrida',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
                             ),
+                          ),
                           ),
                         ],
                       ),

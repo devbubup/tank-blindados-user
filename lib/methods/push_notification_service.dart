@@ -48,8 +48,7 @@ class PushNotificationService {
   }
 
   static sendNotificationToSelectedDriver(String deviceToken,
-      BuildContext context, String tripID) async
-  {
+      BuildContext context, String tripID) async {
     String dropOffDestinationAddress = Provider
         .of<AppInfo>(context, listen: false)
         .dropOffLocation!
@@ -78,12 +77,12 @@ class PushNotificationService {
     };
 
     final http.Response response = await http.post(
-        Uri.parse(endpointFirebaseCloudMessaging),
-        headers: <String, String>{
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $serverAccessTokenKey'
-        },
-        body: jsonEncode(message),
+      Uri.parse(endpointFirebaseCloudMessaging),
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $serverAccessTokenKey'
+      },
+      body: jsonEncode(message),
     );
 
     if(response.statusCode == 200)

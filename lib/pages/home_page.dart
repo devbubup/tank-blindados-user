@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_geofire/flutter_geofire.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
@@ -13,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:users_app/authentication/login_screen.dart';
 import 'package:users_app/global/global_var.dart';
-import 'package:users_app/global/trip_var.dart';
 import 'package:users_app/methods/common_methods.dart';
 import 'package:users_app/methods/manage_drivers_methods.dart';
 import 'package:users_app/methods/push_notification_service.dart';
@@ -25,6 +22,7 @@ import 'package:users_app/pages/destination_search_page.dart';
 import 'package:users_app/pages/trips_history_page.dart';
 import 'package:users_app/widgets/info_dialog.dart';
 import '../appInfo/app_info.dart';
+import '../global/trip_var.dart';
 import '../widgets/loading_dialog.dart';
 import '../widgets/payment_dialog.dart';
 import 'about_page.dart';
@@ -38,43 +36,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-
-  @override
-  void initState() {
-    super.initState();
-    updateDeviceToken();
-    listenForTokenUpdate();
-  }
-
-  void updateDeviceToken() async {
-    FirebaseMessaging.instance.getToken().then((token) {
-      if (token != null) {
-        print("Obtained new device token: $token");
-        updateUserToken(token);
-      } else {
-        print("Failed to obtain device token");
-      }
-    });
-  }
-
-  void listenForTokenUpdate() {
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      print("Token refreshed: $newToken");
-      updateUserToken(newToken);
-    });
-  }
-
-  void updateUserToken(String token) {
-    var userId = FirebaseAuth.instance.currentUser!.uid;
-    var userRef = FirebaseDatabase.instance.ref().child('drivers').child(userId).child('deviceToken');
-    userRef.set(token).then((_) {
-      print("Token updated in database for user: $userId");
-    }).catchError((error) {
-      print("Error updating token in database for user $userId: $error");
-    });
-  }
-
-
   final Completer<GoogleMapController> googleMapCompleterController = Completer<GoogleMapController>();
   GoogleMapController? controllerGoogleMap;
   Position? currentPositionOfUser;
@@ -99,6 +60,245 @@ class _HomePageState extends State<HomePage> {
   StreamSubscription<DatabaseEvent>? tripStreamSubscription;
   bool requestingDirectionDetailsInfo = false;
   String? selectedServiceType;
+
+  @override
+  void initState() {
+    super.initState();
+    getCurrentLiveLocationOfUser();
+    listenToTripStatus();
+  }
+
+  @override
+  void dispose() {
+    tripStreamSubscription?.cancel();
+    super.dispose();
+  }
+
+  void listenToTripStatus() {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").child(user.uid);
+      tripStreamSubscription = tripRequestRef!.onValue.listen((event) {
+        if (event.snapshot.value != null) {
+          Map<String, dynamic> tripData = Map<String, dynamic>.from(event.snapshot.value as Map);
+          String tripStatus = tripData["status"];
+          String? driverLat = tripData["driverLocation"]?["latitude"];
+          String? driverLng = tripData["driverLocation"]?["longitude"];
+
+          print("Trip status updated: $tripStatus");
+          print("Driver Location: Lat = $driverLat, Lng = $driverLng");
+
+          setState(() {
+            if (tripStatus == "accepted") {
+              print("Status: accepted");
+              displayTripDetailsContainer();
+            } else if (tripStatus == "arrived") {
+              print("Status: arrived");
+              tripStatusDisplay = "Driver has arrived";
+            } else if (tripStatus == "ontrip") {
+              if (driverLat != null && driverLng != null) {
+                updateFromDriverCurrentLocationToDropOffDestination(LatLng(double.parse(driverLat), double.parse(driverLng)));
+              }
+            } else if (tripStatus == "completed") {
+              print("Status: completed");
+              tripStatusDisplay = "Trip completed";
+              resetAppNow();
+            }
+          });
+        } else {
+          print("Trip request data is null");
+        }
+      });
+    } else {
+      print("User is null");
+    }
+  }
+
+  void updateFromDriverCurrentLocationToPickUp(LatLng driverCurrentLocationLatLng) async {
+    if (!requestingDirectionDetailsInfo) {
+      requestingDirectionDetailsInfo = true;
+
+      var userPickUpLocationLatLng = LatLng(
+          currentPositionOfUser!.latitude, currentPositionOfUser!.longitude);
+
+      var directionDetailsPickUp = await CommonMethods
+          .getDirectionDetailsFromAPI(driverCurrentLocationLatLng, userPickUpLocationLatLng);
+
+      if (directionDetailsPickUp == null) {
+        print("Failed to get direction details for pick-up");
+        requestingDirectionDetailsInfo = false;
+        return;
+      }
+
+      setState(() {
+        print("Updating trip status display for pick-up location");
+        tripStatusDisplay = "Motorista está à caminho - ${directionDetailsPickUp.durationTextString}";
+      });
+
+      requestingDirectionDetailsInfo = false;
+    }
+  }
+
+  void updateFromDriverCurrentLocationToDropOffDestination(LatLng driverCurrentLocationLatLng) async {
+    if (!requestingDirectionDetailsInfo) {
+      requestingDirectionDetailsInfo = true;
+
+      var dropOffLocation = Provider.of<AppInfo>(context, listen: false).dropOffLocation;
+      var userDropOffLocationLatLng = LatLng(dropOffLocation!.latitudePosition!,
+          dropOffLocation!.longitudePosition!);
+
+      var directionDetailsPickUp = await CommonMethods
+          .getDirectionDetailsFromAPI(driverCurrentLocationLatLng, userDropOffLocationLatLng);
+
+      if (directionDetailsPickUp == null) {
+        print("Failed to get direction details for drop-off");
+        requestingDirectionDetailsInfo = false;
+        return;
+      }
+
+      setState(() {
+        print("Updating trip status display for drop-off location");
+        tripStatusDisplay = "Tempo Restante: ${directionDetailsPickUp.durationTextString}";
+      });
+
+      requestingDirectionDetailsInfo = false;
+    }
+  }
+
+  void displayTripDetailsContainer() {
+    setState(() {
+      print("Displaying trip details container");
+      requestContainerHeight = 0;
+      tripContainerHeight = 291;
+      bottomMapPadding = 201;
+    });
+  }
+
+  void resetAppNow() {
+    setState(() {
+      print("Resetting app to initial state");
+      polylineCoOrdinates.clear();
+      polylineSet.clear();
+      markerSet.clear();
+      circleSet.clear();
+      rideDetailsContainerHeight = 0;
+      requestContainerHeight = 0;
+      tripContainerHeight = 0;
+      searchContainerHeight = 276;
+      bottomMapPadding = 300;
+      isDrawerOpened = true;
+
+      status = "";
+      nameDriver = "";
+      photoDriver = "";
+      phoneNumberDriver = "";
+      carDetailsDriver = "";
+      tripStatusDisplay = "Motorista à caminho";
+    });
+  }
+
+  void makeTripRequest() {
+    tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").push();
+
+    var pickUpLocation = Provider.of<AppInfo>(context, listen: false).pickUpLocation;
+    var dropOffDestinationLocation = Provider.of<AppInfo>(context, listen: false).dropOffLocation;
+
+    Map pickUpCoOrdinatesMap = {
+      "latitude": pickUpLocation!.latitudePosition.toString(),
+      "longitude": pickUpLocation.longitudePosition.toString(),
+    };
+
+    Map dropOffDestinationCoOrdinatesMap = {
+      "latitude": dropOffDestinationLocation!.latitudePosition.toString(),
+      "longitude": dropOffDestinationLocation.longitudePosition.toString(),
+    };
+
+    Map driverCoOrdinates = {
+      "latitude": "",
+      "longitude": "",
+    };
+
+    Map dataMap = {
+      "tripID": tripRequestRef!.key,
+      "publishDateTime": DateTime.now().toString(),
+      "userName": userName,
+      "userPhone": userPhone,
+      "userID": userID,
+      "pickUpLatLng": pickUpCoOrdinatesMap,
+      "dropOffLatLng": dropOffDestinationCoOrdinatesMap,
+      "pickUpAddress": pickUpLocation.placeName,
+      "dropOffAddress": dropOffDestinationLocation.placeName,
+      "driverID": "waiting",
+      "carDetails": "",
+      "driverLocation": driverCoOrdinates,
+      "driverName": "",
+      "driverPhone": "",
+      "driverPhoto": "",
+      "fareAmount": "",
+      "status": "new",
+      "serviceType": selectedServiceType,
+    };
+
+    tripRequestRef!.set(dataMap);
+
+    print("Trip request made with data: $dataMap");
+
+    tripStreamSubscription = tripRequestRef!.onValue.listen((eventSnapshot) async {
+      if (eventSnapshot.snapshot.value == null) {
+        print("Trip request data is null");
+        return;
+      }
+
+      var snapshotValue = eventSnapshot.snapshot.value as Map;
+      print("Trip request updated with snapshot: $snapshotValue");
+
+      if (snapshotValue["status"] != null) {
+        status = snapshotValue["status"];
+      }
+
+      if (status == "accepted") {
+        displayTripDetailsContainer();
+        Geofire.stopListener();
+        setState(() {
+          markerSet.removeWhere((element) => element.markerId.value.contains("driver"));
+        });
+      } else if (status == "arrived") {
+        setState(() {
+          tripStatusDisplay = "O motorista está te aguardando.";
+        });
+      } else if (status == "ontrip") {
+        setState(() {
+        });
+        if (snapshotValue["driverLocation"] != null) {
+          var driverLocation = snapshotValue["driverLocation"];
+          updateFromDriverCurrentLocationToDropOffDestination(LatLng(
+              double.parse(driverLocation["latitude"].toString()),
+              double.parse(driverLocation["longitude"].toString())
+          ));
+        }
+      } else if (status == "ended") {
+        print("Trip ended");
+        if (snapshotValue["fareAmount"] != null) {
+          double fareAmount = double.tryParse(snapshotValue["fareAmount"].toString()) ?? 0.0;
+          var responseFromPaymentDialog = await showDialog(
+            context: context,
+            builder: (BuildContext context) => PaymentDialog(fareAmount: fareAmount.toString()),
+          );
+
+          if (responseFromPaymentDialog == "paid") {
+            tripRequestRef!.onDisconnect();
+            tripRequestRef = null;
+
+            tripStreamSubscription!.cancel();
+            tripStreamSubscription = null;
+
+            resetAppNow();
+          }
+        }
+      }
+    });
+  }
+
 
   makeDriverNearbyCarIcon() {
     if (carIconNearbyDriver == null) {
@@ -151,7 +351,7 @@ class _HomePageState extends State<HomePage> {
               context, MaterialPageRoute(builder: (c) => const LoginScreen()));
 
           cMethods.displaySnackBar(
-              "you are blocked. Contact admin: alizeb875@gmail.com", context);
+              "Você está bloqueado. Entre em contato com o suporte.", context);
         }
       } else {
         FirebaseAuth.instance.signOut();
@@ -162,7 +362,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   displayUserRideDetailsContainer() async {
-    // Verificar se a localização atual está na Zona Oeste
     if (!Regions.isInPermittedRegions(
         currentPositionOfUser!.latitude, currentPositionOfUser!.longitude)) {
       showDialog(
@@ -173,10 +372,9 @@ class _HomePageState extends State<HomePage> {
               description: "Os motoristas não trabalham nessa região de partida.",
             ),
       );
-      return; // parar a execução se o usuário estiver na área restrita
+      return;
     }
 
-    ///Directions API
     await retrieveDirectionDetails();
 
     setState(() {
@@ -205,10 +403,9 @@ class _HomePageState extends State<HomePage> {
       barrierDismissible: false,
       context: context,
       builder: (BuildContext context) =>
-          LoadingDialog(messageText: "Getting direction..."),
+          LoadingDialog(messageText: "Obtendo direções..."),
     );
 
-    ///Directions API
     var detailsFromDirectionAPI = await CommonMethods
         .getDirectionDetailsFromAPI(
         pickupGeoGraphicCoOrdinates, dropOffDestinationGeoGraphicCoOrdinates);
@@ -218,7 +415,6 @@ class _HomePageState extends State<HomePage> {
 
     Navigator.pop(context);
 
-    //draw route from pickup to dropOffDestination
     PolylinePoints pointsPolyline = PolylinePoints();
     List<PointLatLng> latLngPointsFromPickUpToDestination = pointsPolyline
         .decodePolyline(tripDirectionDetailsInfo!.encodedPoints!);
@@ -247,7 +443,6 @@ class _HomePageState extends State<HomePage> {
       polylineSet.add(polyline);
     });
 
-    //fit the polyline into the map
     LatLngBounds boundsLatLng;
     if (pickupGeoGraphicCoOrdinates.latitude >
         dropOffDestinationGeoGraphicCoOrdinates.latitude &&
@@ -283,7 +478,6 @@ class _HomePageState extends State<HomePage> {
     controllerGoogleMap!.animateCamera(
         CameraUpdate.newLatLngBounds(boundsLatLng, 72));
 
-    //add markers to pickup and dropOffDestination points
     Marker pickUpPointMarker = Marker(
       markerId: const MarkerId("pickUpPointMarkerID"),
       position: pickupGeoGraphicCoOrdinates,
@@ -305,7 +499,6 @@ class _HomePageState extends State<HomePage> {
       markerSet.add(dropOffDestinationPointMarker);
     });
 
-    //add circles to pickup and dropOffDestination points
     Circle pickUpPointCircle = Circle(
       circleId: const CircleId('pickupCircleID'),
       strokeColor: Colors.blue,
@@ -330,30 +523,7 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  resetAppNow() {
-    setState(() {
-      polylineCoOrdinates.clear();
-      polylineSet.clear();
-      markerSet.clear();
-      circleSet.clear();
-      rideDetailsContainerHeight = 0;
-      requestContainerHeight = 0;
-      tripContainerHeight = 0;
-      searchContainerHeight = 276;
-      bottomMapPadding = 300;
-      isDrawerOpened = true;
-
-      status = "";
-      nameDriver = "";
-      photoDriver = "";
-      phoneNumberDriver = "";
-      carDetailsDriver = "";
-      tripStatusDisplay = 'Driver is Arriving';
-    });
-  }
-
   cancelRideRequest() {
-    //remove ride request from database
     tripRequestRef!.remove();
 
     setState(() {
@@ -369,17 +539,9 @@ class _HomePageState extends State<HomePage> {
       isDrawerOpened = true;
     });
 
-    //send ride request
     makeTripRequest();
   }
 
-  displayTripDetailsContainer() {
-    setState(() {
-      requestContainerHeight = 0;
-      tripContainerHeight = 291;
-      bottomMapPadding = 201;
-    });
-  }
 
   updateAvailableNearbyOnlineDriversOnMap() {
     setState(() {
@@ -423,21 +585,31 @@ class _HomePageState extends State<HomePage> {
             onlineNearbyDrivers.latDriver = double.tryParse(driverEvent["latitude"].toString());
             onlineNearbyDrivers.lngDriver = double.tryParse(driverEvent["longitude"].toString());
 
-            print("Driver entered: ${onlineNearbyDrivers.uidDriver}, Latitude: ${onlineNearbyDrivers.latDriver}, Longitude: ${onlineNearbyDrivers.lngDriver}");
+            FirebaseDatabase.instance.ref()
+                .child("drivers")
+                .child(onlineNearbyDrivers.uidDriver!)
+                .child("car_details")
+                .child("serviceType")
+                .once()
+                .then((serviceTypeSnapshot) {
+              if (serviceTypeSnapshot.snapshot.value != null) {
+                onlineNearbyDrivers.serviceType = serviceTypeSnapshot.snapshot.value.toString();
+                print("Driver entered: ${onlineNearbyDrivers.uidDriver}, Latitude: ${onlineNearbyDrivers.latDriver}, Longitude: ${onlineNearbyDrivers.lngDriver}, ServiceType: ${onlineNearbyDrivers.serviceType}");
+                ManageDriversMethods.nearbyOnlineDriversList.add(onlineNearbyDrivers);
 
-            ManageDriversMethods.nearbyOnlineDriversList.add(onlineNearbyDrivers);
-
-            if (nearbyOnlineDriversKeysLoaded == true) {
-              // Update drivers on google map
-              updateAvailableNearbyOnlineDriversOnMap();
-            }
+                if (nearbyOnlineDriversKeysLoaded == true) {
+                  updateAvailableNearbyOnlineDriversOnMap();
+                }
+              } else {
+                print("Service type not found for driver: ${onlineNearbyDrivers.uidDriver}");
+              }
+            });
             break;
 
           case Geofire.onKeyExited:
             print("Driver exited: ${driverEvent["key"]}");
             ManageDriversMethods.removeDriverFromList(driverEvent["key"]);
 
-            // Update drivers on google map
             updateAvailableNearbyOnlineDriversOnMap();
             break;
 
@@ -447,18 +619,30 @@ class _HomePageState extends State<HomePage> {
             onlineNearbyDrivers.latDriver = double.tryParse(driverEvent["latitude"].toString());
             onlineNearbyDrivers.lngDriver = double.tryParse(driverEvent["longitude"].toString());
 
-            print("Driver moved: ${onlineNearbyDrivers.uidDriver}, Latitude: ${onlineNearbyDrivers.latDriver}, Longitude: ${onlineNearbyDrivers.lngDriver}");
+            FirebaseDatabase.instance.ref()
+                .child("drivers")
+                .child(onlineNearbyDrivers.uidDriver!)
+                .child("car_details")
+                .child("serviceType")
+                .once()
+                .then((serviceTypeSnapshot) {
+              if (serviceTypeSnapshot.snapshot.value != null) {
+                onlineNearbyDrivers.serviceType = serviceTypeSnapshot.snapshot.value.toString();
+                print("Driver moved: ${onlineNearbyDrivers.uidDriver}, Latitude: ${onlineNearbyDrivers.latDriver}, Longitude: ${onlineNearbyDrivers.lngDriver}, ServiceType: ${onlineNearbyDrivers.serviceType}");
+                ManageDriversMethods.updateOnlineNearbyDriversLocation(onlineNearbyDrivers);
 
-            ManageDriversMethods.updateOnlineNearbyDriversLocation(onlineNearbyDrivers);
-
-            // Update drivers on google map
-            updateAvailableNearbyOnlineDriversOnMap();
+                if (nearbyOnlineDriversKeysLoaded == true) {
+                  updateAvailableNearbyOnlineDriversOnMap();
+                }
+              } else {
+                print("Service type not found for driver: ${onlineNearbyDrivers.uidDriver}");
+              }
+            });
             break;
 
           case Geofire.onGeoQueryReady:
             nearbyOnlineDriversKeysLoaded = true;
 
-            // Update drivers on google map
             updateAvailableNearbyOnlineDriversOnMap();
             break;
         }
@@ -466,181 +650,32 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  makeTripRequest() {
-    tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").push();
-
-    var pickUpLocation = Provider.of<AppInfo>(context, listen: false).pickUpLocation;
-    var dropOffDestinationLocation = Provider.of<AppInfo>(context, listen: false).dropOffLocation;
-
-    Map pickUpCoOrdinatesMap = {
-      "latitude": pickUpLocation!.latitudePosition.toString(),
-      "longitude": pickUpLocation.longitudePosition.toString(),
-    };
-
-    Map dropOffDestinationCoOrdinatesMap = {
-      "latitude": dropOffDestinationLocation!.latitudePosition.toString(),
-      "longitude": dropOffDestinationLocation.longitudePosition.toString(),
-    };
-
-    Map driverCoOrdinates = {
-      "latitude": "",
-      "longitude": "",
-    };
-
-    Map dataMap = {
-      "tripID": tripRequestRef!.key,
-      "publishDateTime": DateTime.now().toString(),
-      "userName": userName,
-      "userPhone": userPhone,
-      "userID": userID,
-      "pickUpLatLng": pickUpCoOrdinatesMap,
-      "dropOffLatLng": dropOffDestinationCoOrdinatesMap,
-      "pickUpAddress": pickUpLocation.placeName,
-      "dropOffAddress": dropOffDestinationLocation.placeName,
-      "driverID": "waiting",
-      "carDetails": "",
-      "driverLocation": driverCoOrdinates,
-      "driverName": "",
-      "driverPhone": "",
-      "driverPhoto": "",
-      "fareAmount": "",
-      "status": "new",
-      "serviceType": selectedServiceType,
-    };
-
-    tripRequestRef!.set(dataMap);
-
-    tripStreamSubscription = tripRequestRef!.onValue.listen((eventSnapshot) async {
-      if (eventSnapshot.snapshot.value == null) {
-        return;
-      }
-
-      var snapshotValue = eventSnapshot.snapshot.value as Map;
-
-      // Obtém o motorista mais próximo
-      OnlineNearbyDrivers? nearestDriver = ManageDriversMethods.getNearestDriver();
-
-      if (nearestDriver != null) {
-        String latitudeString = nearestDriver.latDriver.toString().trim();
-        String longitudeString = nearestDriver.lngDriver.toString().trim();
-
-        print("Latitude string: $latitudeString");
-        print("Longitude string: $longitudeString");
-
-        // Verifica se as strings não estão vazias
-        if (latitudeString.isNotEmpty && longitudeString.isNotEmpty) {
-          double? driverLatitude = double.tryParse(latitudeString);
-          double? driverLongitude = double.tryParse(longitudeString);
-
-          if (driverLatitude != null && driverLongitude != null) {
-            print("Converted Latitude: $driverLatitude, Converted Longitude: $driverLongitude");
-            LatLng driverCurrentLocationLatLng = LatLng(driverLatitude, driverLongitude);
-
-            if (status == "accepted") {
-              updateFromDriverCurrentLocationToPickUp(driverCurrentLocationLatLng);
-            } else if (status == "arrived") {
-              setState(() {
-                tripStatusDisplay = "O motorista chegou!";
-              });
-            } else if (status == "onTrip") {
-              updateFromDriverCurrentLocationToDropOffDestination(driverCurrentLocationLatLng);
-            }
-          } else {
-            // Log the error and the values that caused the issue
-            print("Error converting latitude or longitude to double");
-            print("driverLatitude: $driverLatitude, driverLongitude: $driverLongitude");
-          }
-        } else {
-          print("Latitude or Longitude string is empty");
-        }
-
-        // Chame o método para enviar notificação ao motorista
-        sendNotificationToDriver(nearestDriver);
-      } else {
-        print("No nearest driver found");
-      }
-
-      if (snapshotValue["driverName"] != null) {
-        nameDriver = snapshotValue["driverName"];
-      }
-
-      if (snapshotValue["driverPhone"] != null) {
-        phoneNumberDriver = snapshotValue["driverPhone"];
-      }
-
-      if (snapshotValue["driverPhoto"] != null) {
-        photoDriver = snapshotValue["driverPhoto"];
-      }
-
-      if (snapshotValue["carDetails"] != null) {
-        carDetailsDriver = snapshotValue["carDetails"];
-      }
-
-      if (snapshotValue["status"] != null) {
-        status = snapshotValue["status"];
-      }
-
-      if (status == "accepted") {
-        displayTripDetailsContainer();
-        Geofire.stopListener();
-        setState(() {
-          markerSet.removeWhere((element) => element.markerId.value.contains("driver"));
-        });
-      }
-
-      if (status == "ended") {
-        if (snapshotValue["fareAmount"] != null) {
-          double fareAmount = double.tryParse(snapshotValue["fareAmount"].toString()) ?? 0.0;
-          var responseFromPaymentDialog = await showDialog(
-            context: context,
-            builder: (BuildContext context) => PaymentDialog(fareAmount: fareAmount.toString()),
-          );
-
-          if (responseFromPaymentDialog == "paid") {
-            tripRequestRef!.onDisconnect();
-            tripRequestRef = null;
-
-            tripStreamSubscription!.cancel();
-            tripStreamSubscription = null;
-
-            resetAppNow();
-          }
-        }
-      }
-    });
-  }
-
-  noDriverAvailable(){
+  noDriverAvailable() {
     showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) => InfoDialog(
-        title: "Nenhum motorista disponível",
-        description: "Nenhum motorista foi encontrado próximo à sua localização. Tente novamente mais tarde."
-      )
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) => InfoDialog(
+            title: "Nenhum motorista disponível",
+            description: "Nenhum motorista foi encontrado próximo à sua localização. Tente novamente mais tarde."
+        )
     );
   }
 
-  searchDriver(){
-    if(availableNearbyOnlineDriversList!.length == 0)
-      {
-        cancelRideRequest();
-        resetAppNow();
-        noDriverAvailable();
-        return;
-      }
-    var currentDriver = availableNearbyOnlineDriversList![0];
+  searchDriver() {
+    OnlineNearbyDrivers? nearestDriver = ManageDriversMethods.getNearestDriver(selectedServiceType!);
 
-    // Send Notification to Driver
+    if (nearestDriver != null) {
+      print("Nearest driver found: ${nearestDriver.uidDriver}, Latitude: ${nearestDriver.latDriver}, Longitude: ${nearestDriver.lngDriver}, ServiceType: ${nearestDriver.serviceType}");
 
-    sendNotificationToDriver(currentDriver);
-
-    availableNearbyOnlineDriversList!.removeAt(0);
-
+      sendNotificationToDriver(nearestDriver);
+    } else {
+      print("No nearest driver found for service type: $selectedServiceType");
+      noDriverAvailable();
+      resetAppNow();
+    }
   }
 
   sendNotificationToDriver(OnlineNearbyDrivers currentDriver) {
-
     DatabaseReference currentDriverRef = FirebaseDatabase.instance
         .ref()
         .child("drivers")
@@ -656,9 +691,7 @@ class _HomePageState extends State<HomePage> {
         .child("deviceToken");
 
     tokenOfCurrentDriverRef.once().then((dataSnapshot) {
-
       if (dataSnapshot.snapshot.value != null) {
-
         String deviceToken = dataSnapshot.snapshot.value.toString();
 
         print("Device Token do motorista: $deviceToken");
@@ -678,7 +711,6 @@ class _HomePageState extends State<HomePage> {
       var timerCountDown = Timer.periodic(oneTickPerSec, (timer) {
         requestTimeoutDriver = requestTimeoutDriver - 1;
 
-        // Quando o pedido de viagem não estiver solicitando, ou seja, pedido de viagem cancelado - pare o timer
         if (stateOfApp != "requesting") {
           timer.cancel();
           currentDriverRef.set("cancelled");
@@ -686,78 +718,25 @@ class _HomePageState extends State<HomePage> {
           requestTimeoutDriver = 20;
         }
 
-        // Quando o pedido de viagem é aceito pelo motorista disponível online mais próximo
         currentDriverRef.onValue.listen((dataSnapshot) {
           if (dataSnapshot.snapshot.value.toString() == "accepted") {
             timer.cancel();
             currentDriverRef.onDisconnect();
             requestTimeoutDriver = 20;
+            displayTripDetailsContainer();
           }
         });
 
-        // Se 20 segundos se passaram - envie a notificação para o próximo motorista disponível online mais próximo
         if (requestTimeoutDriver == 0) {
           currentDriverRef.set("timeout");
           timer.cancel();
           currentDriverRef.onDisconnect();
           requestTimeoutDriver = 20;
 
-          // Envie a notificação para o próximo motorista disponível online mais próximo
+          searchDriver();
         }
       });
     });
-  }
-
-  void updateFromDriverCurrentLocationToPickUp(driverCurrentLocationLatLng) async
-  {
-    if (!requestingDirectionDetailsInfo) {
-      requestingDirectionDetailsInfo = true;
-
-      var userPickUpLocationLatLng = LatLng(
-          currentPositionOfUser!.latitude, currentPositionOfUser!.longitude);
-
-      var directionDetailsPickUp = await CommonMethods
-          .getDirectionDetailsFromAPI(
-          driverCurrentLocationLatLng, userPickUpLocationLatLng);
-
-      if (directionDetailsPickUp == null) {
-        return;
-      }
-
-      setState(() {
-        tripStatusDisplay = "Motorista está à caminho - ${directionDetailsPickUp.durationTextString}";
-      });
-
-      requestingDirectionDetailsInfo = false;
-    }
-  }
-
-  void updateFromDriverCurrentLocationToDropOffDestination(driverCurrentLocationLatLng) async
-  {
-    if (!requestingDirectionDetailsInfo) {
-      requestingDirectionDetailsInfo = true;
-
-      var dropOffLocation = Provider
-          .of<AppInfo>(context, listen: false)
-          .dropOffLocation;
-      var userDropOffLocationLatLng = LatLng(dropOffLocation!.latitudePosition!,
-          dropOffLocation!.longitudePosition!);
-
-      var directionDetailsPickUp = await CommonMethods
-          .getDirectionDetailsFromAPI(
-          driverCurrentLocationLatLng, userDropOffLocationLatLng);
-
-      if (directionDetailsPickUp == null) {
-        return;
-      }
-
-      setState(() {
-        tripStatusDisplay =
-        "Motorista ao destino - ${directionDetailsPickUp.durationTextString}";
-      });
-
-      requestingDirectionDetailsInfo = false;
-    }
   }
 
   void showServiceInfoDialog(String serviceName) {
@@ -779,7 +758,7 @@ class _HomePageState extends State<HomePage> {
         infoText = "Número de Passageiros: 8 (+ motorista)\nNúmero de Malas: 6\nTipos de Carros: Honda Odyssey, Toyota Sienna";
         break;
       case "Van":
-        infoText = "Número de Passageiros: 12 (+ motorista)ß\nNúmero de Malas: 10\nTipos de Carros: Mercedes-Benz Sprinter, Ford Transit";
+        infoText = "Número de Passageiros: 12 (+ motorista)\nNúmero de Malas: 10\nTipos de Carros: Mercedes-Benz Sprinter, Ford Transit";
         break;
       default:
         infoText = "Informações não disponíveis.";
@@ -832,10 +811,8 @@ class _HomePageState extends State<HomePage> {
 
         displayRequestContainer();
 
-        // Motorista Online Próximo
         availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
 
-        // Search Driver
         searchDriver();
 
       },
@@ -899,7 +876,6 @@ class _HomePageState extends State<HomePage> {
                 thickness: 1,
               ),
 
-              //header
               Container(
                 color: Colors.black54,
                 height: 160,
@@ -964,7 +940,6 @@ class _HomePageState extends State<HomePage> {
                 height: 10,
               ),
 
-              //body
               GestureDetector(
                 onTap: ()
                 {
@@ -1013,7 +988,6 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         children: [
 
-          ///google map
           GoogleMap(
             padding: EdgeInsets.only(top: 26, bottom: bottomMapPadding),
             mapType: MapType.normal,
@@ -1035,7 +1009,6 @@ class _HomePageState extends State<HomePage> {
             },
           ),
 
-          ///drawer button
           Positioned(
             top: 40,
             left: 20,
@@ -1072,19 +1045,17 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          ///buttons container
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: Container(
-              height: 250, // Aumente a altura conforme necessário
+              height: 250,
               color: Colors.black.withOpacity(0.8),
               padding: const EdgeInsets.symmetric(
                   vertical: 20, horizontal: 20),
               child: Column(
                 children: [
-                  // Barra de pesquisa
                   GestureDetector(
                     onTap: () async {
                       var responseFromSearchPage = await Navigator.push(
@@ -1121,11 +1092,9 @@ class _HomePageState extends State<HomePage> {
 
                   const SizedBox(height: 20),
 
-                  // Botões de agendamento e trabalho
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      // Botão de agendamento
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () async {
@@ -1133,7 +1102,7 @@ class _HomePageState extends State<HomePage> {
                                 context,
                                 MaterialPageRoute(
                                     builder: (c) =>
-                                    const DestinationSearchPage())); // Chama a nova página de busca
+                                    const DestinationSearchPage()));
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.grey,
@@ -1149,7 +1118,6 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      // Botão de trabalho
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () async {
@@ -1179,7 +1147,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          ///ride details container
           if (rideDetailsContainerHeight > 0)
             Positioned(
               left: 0,
@@ -1255,7 +1222,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          ///request container
           if (requestContainerHeight > 0)
             Positioned(
               left: 0,
@@ -1327,7 +1293,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          ///trip details container
           Positioned(
               left: 0,
               right: 0,
@@ -1367,7 +1332,6 @@ class _HomePageState extends State<HomePage> {
                         ],
                       ),
 
-
                       const SizedBox(height: 19,),
 
                       const Divider(
@@ -1378,7 +1342,6 @@ class _HomePageState extends State<HomePage> {
 
                       const SizedBox(height: 19,),
 
-                      //image - driver name and driver car details
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
