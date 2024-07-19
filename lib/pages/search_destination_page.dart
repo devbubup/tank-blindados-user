@@ -22,6 +22,14 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
   TextEditingController destinationTextEditingController = TextEditingController();
   List<PredictionModel> dropOffPredictionsPlacesList = [];
 
+  @override
+  void initState() {
+    super.initState();
+    // Defina o endereço de coleta inicial no controlador de texto
+    String userAddress = Provider.of<AppInfo>(context, listen: false).pickUpLocation?.humanReadableAddress ?? "";
+    pickUpTextEditingController.text = userAddress;
+  }
+
   searchLocation(String locationName) async {
     if (locationName.length > 1) {
       String apiPlacesUrl = "https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$locationName&key=$googleMapKey&components=country:br";
@@ -76,9 +84,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
 
   @override
   Widget build(BuildContext context) {
-    String userAddress = Provider.of<AppInfo>(context, listen: false).pickUpLocation!.humanReadableAddress ?? "";
-    pickUpTextEditingController.text = userAddress;
-
     return Scaffold(
       body: SingleChildScrollView(
         child: Column(
