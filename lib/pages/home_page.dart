@@ -61,6 +61,13 @@ class _HomePageState extends State<HomePage> {
   bool requestingDirectionDetailsInfo = false;
   String? selectedServiceType;
 
+  // Variáveis relacionadas ao motorista
+  String driverName = "";
+  String driverPhoto = "";
+  String driverPhone = "";
+  String carDetailsDriver = "";
+  String tripStatusDisplay = "Driver is coming";
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +99,7 @@ class _HomePageState extends State<HomePage> {
             if (tripStatus == "accepted") {
               print("Status: accepted");
               displayTripDetailsContainer();
+              updateDriverDetails(tripData["driverID"]);
             } else if (tripStatus == "arrived") {
               print("Status: arrived");
               tripStatusDisplay = "Driver has arrived";
@@ -111,6 +119,25 @@ class _HomePageState extends State<HomePage> {
       });
     } else {
       print("User is null");
+    }
+  }
+
+  void updateDriverDetails(String driverID) async {
+    print("Fetching driver details for ID: $driverID");
+    DatabaseReference driverRef = FirebaseDatabase.instance.ref().child("drivers").child(driverID);
+    DataSnapshot snapshot = (await driverRef.once()).snapshot;
+
+    if (snapshot.value != null) {
+      Map driverData = snapshot.value as Map;
+      setState(() {
+        driverName = driverData["name"];
+        driverPhoto = driverData["photo"];
+        driverPhone = driverData["phone"];
+        carDetailsDriver = "${driverData["car_details"]["carModel"]} - ${driverData["car_details"]["carColor"]} - ${driverData["car_details"]["carNumber"]}";
+      });
+      print("Driver details updated: Name = $driverName, Photo = $driverPhoto, Phone = $driverPhone, Car Details = $carDetailsDriver");
+    } else {
+      print("No driver data found for ID: $driverID");
     }
   }
 
@@ -145,7 +172,7 @@ class _HomePageState extends State<HomePage> {
 
       var dropOffLocation = Provider.of<AppInfo>(context, listen: false).dropOffLocation;
       var userDropOffLocationLatLng = LatLng(dropOffLocation!.latitudePosition!,
-          dropOffLocation!.longitudePosition!);
+          dropOffLocation.longitudePosition!);
 
       var directionDetailsPickUp = await CommonMethods
           .getDirectionDetailsFromAPI(driverCurrentLocationLatLng, userDropOffLocationLatLng);
@@ -189,9 +216,9 @@ class _HomePageState extends State<HomePage> {
       isDrawerOpened = true;
 
       status = "";
-      nameDriver = "";
-      photoDriver = "";
-      phoneNumberDriver = "";
+      driverName = "";
+      driverPhoto = "";
+      driverPhone = "";
       carDetailsDriver = "";
       tripStatusDisplay = "Motorista à caminho";
     });
@@ -258,6 +285,7 @@ class _HomePageState extends State<HomePage> {
 
       if (status == "accepted") {
         displayTripDetailsContainer();
+        updateDriverDetails(snapshotValue["driverID"]);
         Geofire.stopListener();
         setState(() {
           markerSet.removeWhere((element) => element.markerId.value.contains("driver"));
@@ -267,8 +295,7 @@ class _HomePageState extends State<HomePage> {
           tripStatusDisplay = "O motorista está te aguardando.";
         });
       } else if (status == "ontrip") {
-        setState(() {
-        });
+        setState(() {});
         if (snapshotValue["driverLocation"] != null) {
           var driverLocation = snapshotValue["driverLocation"];
           updateFromDriverCurrentLocationToDropOffDestination(LatLng(
@@ -298,7 +325,6 @@ class _HomePageState extends State<HomePage> {
       }
     });
   }
-
 
   makeDriverNearbyCarIcon() {
     if (carIconNearbyDriver == null) {
@@ -541,7 +567,6 @@ class _HomePageState extends State<HomePage> {
 
     makeTripRequest();
   }
-
 
   updateAvailableNearbyOnlineDriversOnMap() {
     setState(() {
@@ -1293,7 +1318,8 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          Positioned(
+          if (tripContainerHeight > 0)
+            Positioned(
               left: 0,
               right: 0,
               bottom: 0,
@@ -1331,72 +1357,55 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 19,),
-
                       const Divider(
                         height: 1,
                         color: Colors.white70,
                         thickness: 1,
                       ),
-
                       const SizedBox(height: 19,),
-
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-
                           ClipOval(
                             child: Image.network(
-                              photoDriver == ''
+                              driverPhoto == ''
                                   ? "https://firebasestorage.googleapis.com/v0/b/flutter-uber-clone-f49e2.appspot.com/o/avatarman.png?alt=media&token=39a4cc1e-6d96-4c4d-80d3-e8dc99505d73"
-                                  : photoDriver,
+                                  : driverPhoto,
                               width: 60,
                               height: 60,
                               fit: BoxFit.cover,
                             ),
                           ),
-
                           const SizedBox(width: 8,),
-
                           Column(
                             mainAxisAlignment: MainAxisAlignment.start,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-
-                              Text(nameDriver, style: const TextStyle(fontSize: 20, color: Colors.grey,),),
-
+                              Text(driverName, style: const TextStyle(fontSize: 20, color: Colors.grey,),),
                               Text(carDetailsDriver, style: const TextStyle(fontSize: 14, color: Colors.grey,),),
                             ],
                           ),
-
                         ],
                       ),
-
                       const SizedBox(height: 19,),
-
                       const Divider(
                         height: 1,
                         color: Colors.white70,
                         thickness: 1,
                       ),
-
                       const SizedBox(height: 19,),
-
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-
                           GestureDetector(
-                            onTap: ()
-                            {
-                              launchUrl(Uri.parse("tel://$phoneNumberDriver"));
+                            onTap: () {
+                              launchUrl(Uri.parse("tel://$driverPhone"));
                             },
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-
                                 Container(
                                   height: 50,
                                   width: 50,
@@ -1412,24 +1421,18 @@ class _HomePageState extends State<HomePage> {
                                     color: Colors.white,
                                   ),
                                 ),
-
                                 const SizedBox(height: 11,),
-
                                 const Text("Call", style: TextStyle(color: Colors.grey,),),
-
                               ],
                             ),
                           ),
-
                         ],
                       ),
                     ],
                   ),
                 ),
-
-
-              )
-          ),
+              ),
+            ),
         ],
       ),
     );
