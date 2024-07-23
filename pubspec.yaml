@@ -42,6 +42,7 @@ dependencies:
   firebase_storage:
   google_maps_flutter: ^2.1.1
   permission_handler:
+  firebase_messaging:
   geolocator:
   http:
   provider:
@@ -53,6 +54,8 @@ dependencies:
   intl:
   flutter_datetime_picker:
   url_launcher:
+  restart_app:
+  flutter_stripe: ^10.2.0
 
 dev_dependencies:
   flutter_test:

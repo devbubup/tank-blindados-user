@@ -1,11 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_geofire/flutter_geofire.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
@@ -15,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:users_app/authentication/login_screen.dart';
 import 'package:users_app/global/global_var.dart';
-import 'package:users_app/global/trip_var.dart';
 import 'package:users_app/methods/common_methods.dart';
 import 'package:users_app/methods/manage_drivers_methods.dart';
 import 'package:users_app/methods/push_notification_service.dart';
@@ -26,12 +21,12 @@ import 'package:users_app/pages/profile_page.dart';
 import 'package:users_app/pages/destination_search_page.dart';
 import 'package:users_app/pages/trips_history_page.dart';
 import 'package:users_app/widgets/info_dialog.dart';
-
 import '../appInfo/app_info.dart';
+import '../global/trip_var.dart';
 import '../widgets/loading_dialog.dart';
 import '../widgets/payment_dialog.dart';
 import 'about_page.dart';
-import 'package:users_app/models/regions.dart'; // Importar o arquivo regions
+import 'package:users_app/models/regions.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -41,7 +36,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-
   final Completer<GoogleMapController> googleMapCompleterController = Completer<GoogleMapController>();
   GoogleMapController? controllerGoogleMap;
   Position? currentPositionOfUser;
@@ -65,7 +59,272 @@ class _HomePageState extends State<HomePage> {
   List<OnlineNearbyDrivers>? availableNearbyOnlineDriversList;
   StreamSubscription<DatabaseEvent>? tripStreamSubscription;
   bool requestingDirectionDetailsInfo = false;
+  String? selectedServiceType;
 
+  // Variáveis relacionadas ao motorista
+  String driverName = "";
+  String driverPhoto = "";
+  String driverPhone = "";
+  String carDetailsDriver = "";
+  String tripStatusDisplay = "Driver is coming";
+
+  @override
+  void initState() {
+    super.initState();
+    getCurrentLiveLocationOfUser();
+    listenToTripStatus();
+  }
+
+  @override
+  void dispose() {
+    tripStreamSubscription?.cancel();
+    super.dispose();
+  }
+
+  void listenToTripStatus() {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").child(user.uid);
+      tripStreamSubscription = tripRequestRef!.onValue.listen((event) {
+        if (event.snapshot.value != null) {
+          Map<String, dynamic> tripData = Map<String, dynamic>.from(event.snapshot.value as Map);
+          String tripStatus = tripData["status"];
+          String? driverLat = tripData["driverLocation"]?["latitude"];
+          String? driverLng = tripData["driverLocation"]?["longitude"];
+
+          print("Trip status updated: $tripStatus");
+          print("Driver Location: Lat = $driverLat, Lng = $driverLng");
+
+          setState(() {
+            if (tripStatus == "accepted") {
+              print("Status: accepted");
+              displayTripDetailsContainer();
+              updateDriverDetails(tripData["driverID"]);
+            } else if (tripStatus == "arrived") {
+              print("Status: arrived");
+              tripStatusDisplay = "Driver has arrived";
+            } else if (tripStatus == "ontrip") {
+              if (driverLat != null && driverLng != null) {
+                updateFromDriverCurrentLocationToDropOffDestination(LatLng(double.parse(driverLat), double.parse(driverLng)));
+              }
+            } else if (tripStatus == "completed") {
+              print("Status: completed");
+              tripStatusDisplay = "Trip completed";
+              resetAppNow();
+            }
+          });
+        } else {
+          print("Trip request data is null");
+        }
+      });
+    } else {
+      print("User is null");
+    }
+  }
+
+  void updateDriverDetails(String driverID) async {
+    print("Fetching driver details for ID: $driverID");
+    DatabaseReference driverRef = FirebaseDatabase.instance.ref().child("drivers").child(driverID);
+    DataSnapshot snapshot = (await driverRef.once()).snapshot;
+
+    if (snapshot.value != null) {
+      Map driverData = snapshot.value as Map;
+      setState(() {
+        driverName = driverData["name"];
+        driverPhoto = driverData["photo"];
+        driverPhone = driverData["phone"];
+        carDetailsDriver = "${driverData["car_details"]["carModel"]} - ${driverData["car_details"]["carColor"]} - ${driverData["car_details"]["carNumber"]}";
+      });
+      print("Driver details updated: Name = $driverName, Photo = $driverPhoto, Phone = $driverPhone, Car Details = $carDetailsDriver");
+    } else {
+      print("No driver data found for ID: $driverID");
+    }
+  }
+
+  void updateFromDriverCurrentLocationToPickUp(LatLng driverCurrentLocationLatLng) async {
+    if (!requestingDirectionDetailsInfo) {
+      requestingDirectionDetailsInfo = true;
+
+      var userPickUpLocationLatLng = LatLng(
+          currentPositionOfUser!.latitude, currentPositionOfUser!.longitude);
+
+      var directionDetailsPickUp = await CommonMethods
+          .getDirectionDetailsFromAPI(driverCurrentLocationLatLng, userPickUpLocationLatLng);
+
+      if (directionDetailsPickUp == null) {
+        print("Failed to get direction details for pick-up");
+        requestingDirectionDetailsInfo = false;
+        return;
+      }
+
+      setState(() {
+        print("Updating trip status display for pick-up location");
+        tripStatusDisplay = "Motorista está à caminho - ${directionDetailsPickUp.durationTextString}";
+      });
+
+      requestingDirectionDetailsInfo = false;
+    }
+  }
+
+  void updateFromDriverCurrentLocationToDropOffDestination(LatLng driverCurrentLocationLatLng) async {
+    if (!requestingDirectionDetailsInfo) {
+      requestingDirectionDetailsInfo = true;
+
+      var dropOffLocation = Provider.of<MyAppInfo>(context, listen: false).dropOffLocation;
+      var userDropOffLocationLatLng = LatLng(dropOffLocation!.latitudePosition!,
+          dropOffLocation.longitudePosition!);
+
+      var directionDetailsPickUp = await CommonMethods
+          .getDirectionDetailsFromAPI(driverCurrentLocationLatLng, userDropOffLocationLatLng);
+
+      if (directionDetailsPickUp == null) {
+        print("Failed to get direction details for drop-off");
+        requestingDirectionDetailsInfo = false;
+        return;
+      }
+
+      setState(() {
+        print("Updating trip status display for drop-off location");
+        tripStatusDisplay = "Tempo Restante: ${directionDetailsPickUp.durationTextString}";
+      });
+
+      requestingDirectionDetailsInfo = false;
+    }
+  }
+
+  void displayTripDetailsContainer() {
+    setState(() {
+      print("Displaying trip details container");
+      requestContainerHeight = 0;
+      tripContainerHeight = 291;
+      bottomMapPadding = 201;
+    });
+  }
+
+  void resetAppNow() {
+    setState(() {
+      print("Resetting app to initial state");
+      polylineCoOrdinates.clear();
+      polylineSet.clear();
+      markerSet.clear();
+      circleSet.clear();
+      rideDetailsContainerHeight = 0;
+      requestContainerHeight = 0;
+      tripContainerHeight = 0;
+      searchContainerHeight = 276;
+      bottomMapPadding = 300;
+      isDrawerOpened = true;
+
+      status = "";
+      driverName = "";
+      driverPhoto = "";
+      driverPhone = "";
+      carDetailsDriver = "";
+      tripStatusDisplay = "Motorista à caminho";
+    });
+  }
+
+  void makeTripRequest() {
+    tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").push();
+
+    var pickUpLocation = Provider.of<MyAppInfo>(context, listen: false).pickUpLocation;
+    var dropOffDestinationLocation = Provider.of<MyAppInfo>(context, listen: false).dropOffLocation;
+
+    Map pickUpCoOrdinatesMap = {
+      "latitude": pickUpLocation!.latitudePosition.toString(),
+      "longitude": pickUpLocation.longitudePosition.toString(),
+    };
+
+    Map dropOffDestinationCoOrdinatesMap = {
+      "latitude": dropOffDestinationLocation!.latitudePosition.toString(),
+      "longitude": dropOffDestinationLocation.longitudePosition.toString(),
+    };
+
+    Map driverCoOrdinates = {
+      "latitude": "",
+      "longitude": "",
+    };
+
+    Map dataMap = {
+      "tripID": tripRequestRef!.key,
+      "publishDateTime": DateTime.now().toString(),
+      "userName": userName,
+      "userPhone": userPhone,
+      "userID": userID,
+      "pickUpLatLng": pickUpCoOrdinatesMap,
+      "dropOffLatLng": dropOffDestinationCoOrdinatesMap,
+      "pickUpAddress": pickUpLocation.humanReadableAddress ?? "Unknown address",
+      "dropOffAddress": dropOffDestinationLocation.placeName ?? "Unknown address",
+      "driverID": "waiting",
+      "carDetails": "",
+      "driverLocation": driverCoOrdinates,
+      "driverName": "",
+      "driverPhone": "",
+      "driverPhoto": "",
+      "fareAmount": "",
+      "status": "new",
+      "serviceType": selectedServiceType,
+    };
+
+    tripRequestRef!.set(dataMap);
+
+    print("Trip request made with data: $dataMap");
+
+    tripStreamSubscription = tripRequestRef!.onValue.listen((eventSnapshot) async {
+      if (eventSnapshot.snapshot.value == null) {
+        print("Trip request data is null");
+        return;
+      }
+
+      var snapshotValue = eventSnapshot.snapshot.value as Map;
+      print("Trip request updated with snapshot: $snapshotValue");
+
+      if (snapshotValue["status"] != null) {
+        status = snapshotValue["status"];
+      }
+
+      if (status == "accepted") {
+        displayTripDetailsContainer();
+        updateDriverDetails(snapshotValue["driverID"]);
+        Geofire.stopListener();
+        setState(() {
+          markerSet.removeWhere((element) => element.markerId.value.contains("driver"));
+        });
+      } else if (status == "arrived") {
+        setState(() {
+          tripStatusDisplay = "O motorista está te aguardando.";
+        });
+      } else if (status == "ontrip") {
+        setState(() {});
+        if (snapshotValue["driverLocation"] != null) {
+          var driverLocation = snapshotValue["driverLocation"];
+          updateFromDriverCurrentLocationToDropOffDestination(LatLng(
+              double.parse(driverLocation["latitude"].toString()),
+              double.parse(driverLocation["longitude"].toString())
+          ));
+        }
+      } else if (status == "ended") {
+        print("Trip ended");
+        if (snapshotValue["fareAmount"] != null) {
+          double fareAmount = double.tryParse(snapshotValue["fareAmount"].toString()) ?? 0.0;
+          var responseFromPaymentDialog = await showDialog(
+            context: context,
+            builder: (BuildContext context) => PaymentDialog(fareAmount: fareAmount.toString()),
+          );
+
+          if (responseFromPaymentDialog == "paid") {
+            tripRequestRef!.onDisconnect();
+            tripRequestRef = null;
+
+            tripStreamSubscription!.cancel();
+            tripStreamSubscription = null;
+
+            resetAppNow();
+          }
+        }
+      }
+    });
+  }
 
   makeDriverNearbyCarIcon() {
     if (carIconNearbyDriver == null) {
@@ -118,7 +377,7 @@ class _HomePageState extends State<HomePage> {
               context, MaterialPageRoute(builder: (c) => const LoginScreen()));
 
           cMethods.displaySnackBar(
-              "you are blocked. Contact admin: alizeb875@gmail.com", context);
+              "Você está bloqueado. Entre em contato com o suporte.", context);
         }
       } else {
         FirebaseAuth.instance.signOut();
@@ -129,7 +388,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   displayUserRideDetailsContainer() async {
-    // Verificar se a localização atual está na Zona Oeste
     if (!Regions.isInPermittedRegions(
         currentPositionOfUser!.latitude, currentPositionOfUser!.longitude)) {
       showDialog(
@@ -140,26 +398,25 @@ class _HomePageState extends State<HomePage> {
               description: "Os motoristas não trabalham nessa região de partida.",
             ),
       );
-      return; // parar a execução se o usuário estiver na área restrita
+      return;
     }
 
-    ///Directions API
     await retrieveDirectionDetails();
 
     setState(() {
       searchContainerHeight = 0;
       bottomMapPadding = 240;
-      rideDetailsContainerHeight = 242;
+      rideDetailsContainerHeight = 320;
       isDrawerOpened = false;
     });
   }
 
   retrieveDirectionDetails() async {
     var pickUpLocation = Provider
-        .of<AppInfo>(context, listen: false)
+        .of<MyAppInfo>(context, listen: false)
         .pickUpLocation;
     var dropOffDestinationLocation = Provider
-        .of<AppInfo>(context, listen: false)
+        .of<MyAppInfo>(context, listen: false)
         .dropOffLocation;
 
     var pickupGeoGraphicCoOrdinates = LatLng(
@@ -172,10 +429,9 @@ class _HomePageState extends State<HomePage> {
       barrierDismissible: false,
       context: context,
       builder: (BuildContext context) =>
-          LoadingDialog(messageText: "Getting direction..."),
+          LoadingDialog(messageText: "Obtendo direções..."),
     );
 
-    ///Directions API
     var detailsFromDirectionAPI = await CommonMethods
         .getDirectionDetailsFromAPI(
         pickupGeoGraphicCoOrdinates, dropOffDestinationGeoGraphicCoOrdinates);
@@ -185,7 +441,6 @@ class _HomePageState extends State<HomePage> {
 
     Navigator.pop(context);
 
-    //draw route from pickup to dropOffDestination
     PolylinePoints pointsPolyline = PolylinePoints();
     List<PointLatLng> latLngPointsFromPickUpToDestination = pointsPolyline
         .decodePolyline(tripDirectionDetailsInfo!.encodedPoints!);
@@ -214,7 +469,6 @@ class _HomePageState extends State<HomePage> {
       polylineSet.add(polyline);
     });
 
-    //fit the polyline into the map
     LatLngBounds boundsLatLng;
     if (pickupGeoGraphicCoOrdinates.latitude >
         dropOffDestinationGeoGraphicCoOrdinates.latitude &&
@@ -250,7 +504,6 @@ class _HomePageState extends State<HomePage> {
     controllerGoogleMap!.animateCamera(
         CameraUpdate.newLatLngBounds(boundsLatLng, 72));
 
-    //add markers to pickup and dropOffDestination points
     Marker pickUpPointMarker = Marker(
       markerId: const MarkerId("pickUpPointMarkerID"),
       position: pickupGeoGraphicCoOrdinates,
@@ -272,7 +525,6 @@ class _HomePageState extends State<HomePage> {
       markerSet.add(dropOffDestinationPointMarker);
     });
 
-    //add circles to pickup and dropOffDestination points
     Circle pickUpPointCircle = Circle(
       circleId: const CircleId('pickupCircleID'),
       strokeColor: Colors.blue,
@@ -297,30 +549,7 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  resetAppNow() {
-    setState(() {
-      polylineCoOrdinates.clear();
-      polylineSet.clear();
-      markerSet.clear();
-      circleSet.clear();
-      rideDetailsContainerHeight = 0;
-      requestContainerHeight = 0;
-      tripContainerHeight = 0;
-      searchContainerHeight = 276;
-      bottomMapPadding = 300;
-      isDrawerOpened = true;
-
-      status = "";
-      nameDriver = "";
-      photoDriver = "";
-      phoneNumberDriver = "";
-      carDetailsDriver = "";
-      tripStatusDisplay = 'Driver is Arriving';
-    });
-  }
-
   cancelRideRequest() {
-    //remove ride request from database
     tripRequestRef!.remove();
 
     setState(() {
@@ -336,7 +565,6 @@ class _HomePageState extends State<HomePage> {
       isDrawerOpened = true;
     });
 
-    //send ride request
     makeTripRequest();
   }
 
@@ -379,275 +607,100 @@ class _HomePageState extends State<HomePage> {
           case Geofire.onKeyEntered:
             OnlineNearbyDrivers onlineNearbyDrivers = OnlineNearbyDrivers();
             onlineNearbyDrivers.uidDriver = driverEvent["key"];
-            onlineNearbyDrivers.latDriver = driverEvent["latitude"];
-            onlineNearbyDrivers.lngDriver = driverEvent["longitude"];
-            ManageDriversMethods.nearbyOnlineDriversList.add(
-                onlineNearbyDrivers);
+            onlineNearbyDrivers.latDriver = double.tryParse(driverEvent["latitude"].toString());
+            onlineNearbyDrivers.lngDriver = double.tryParse(driverEvent["longitude"].toString());
 
-            if (nearbyOnlineDriversKeysLoaded == true) {
-              //update drivers on google map
-              updateAvailableNearbyOnlineDriversOnMap();
-            }
+            FirebaseDatabase.instance.ref()
+                .child("drivers")
+                .child(onlineNearbyDrivers.uidDriver!)
+                .child("car_details")
+                .child("serviceType")
+                .once()
+                .then((serviceTypeSnapshot) {
+              if (serviceTypeSnapshot.snapshot.value != null) {
+                onlineNearbyDrivers.serviceType = serviceTypeSnapshot.snapshot.value.toString();
+                print("Driver entered: ${onlineNearbyDrivers.uidDriver}, Latitude: ${onlineNearbyDrivers.latDriver}, Longitude: ${onlineNearbyDrivers.lngDriver}, ServiceType: ${onlineNearbyDrivers.serviceType}");
+                ManageDriversMethods.nearbyOnlineDriversList.add(onlineNearbyDrivers);
 
+                if (nearbyOnlineDriversKeysLoaded == true) {
+                  updateAvailableNearbyOnlineDriversOnMap();
+                }
+              } else {
+                print("Service type not found for driver: ${onlineNearbyDrivers.uidDriver}");
+              }
+            });
             break;
 
           case Geofire.onKeyExited:
+            print("Driver exited: ${driverEvent["key"]}");
             ManageDriversMethods.removeDriverFromList(driverEvent["key"]);
 
-            //update drivers on google map
             updateAvailableNearbyOnlineDriversOnMap();
-
             break;
 
           case Geofire.onKeyMoved:
             OnlineNearbyDrivers onlineNearbyDrivers = OnlineNearbyDrivers();
             onlineNearbyDrivers.uidDriver = driverEvent["key"];
-            onlineNearbyDrivers.latDriver = driverEvent["latitude"];
-            onlineNearbyDrivers.lngDriver = driverEvent["longitude"];
-            ManageDriversMethods.updateOnlineNearbyDriversLocation(
-                onlineNearbyDrivers);
+            onlineNearbyDrivers.latDriver = double.tryParse(driverEvent["latitude"].toString());
+            onlineNearbyDrivers.lngDriver = double.tryParse(driverEvent["longitude"].toString());
 
-            //update drivers on google map
-            updateAvailableNearbyOnlineDriversOnMap();
+            FirebaseDatabase.instance.ref()
+                .child("drivers")
+                .child(onlineNearbyDrivers.uidDriver!)
+                .child("car_details")
+                .child("serviceType")
+                .once()
+                .then((serviceTypeSnapshot) {
+              if (serviceTypeSnapshot.snapshot.value != null) {
+                onlineNearbyDrivers.serviceType = serviceTypeSnapshot.snapshot.value.toString();
+                print("Driver moved: ${onlineNearbyDrivers.uidDriver}, Latitude: ${onlineNearbyDrivers.latDriver}, Longitude: ${onlineNearbyDrivers.lngDriver}, ServiceType: ${onlineNearbyDrivers.serviceType}");
+                ManageDriversMethods.updateOnlineNearbyDriversLocation(onlineNearbyDrivers);
 
+                if (nearbyOnlineDriversKeysLoaded == true) {
+                  updateAvailableNearbyOnlineDriversOnMap();
+                }
+              } else {
+                print("Service type not found for driver: ${onlineNearbyDrivers.uidDriver}");
+              }
+            });
             break;
 
           case Geofire.onGeoQueryReady:
             nearbyOnlineDriversKeysLoaded = true;
 
-            //update drivers on google map
             updateAvailableNearbyOnlineDriversOnMap();
-
             break;
         }
       }
     });
-  }
-
-  makeTripRequest() {
-    tripRequestRef =
-        FirebaseDatabase.instance.ref().child("tripRequests").push();
-
-    var pickUpLocation = Provider
-        .of<AppInfo>(context, listen: false)
-        .pickUpLocation;
-    var dropOffDestinationLocation = Provider
-        .of<AppInfo>(context, listen: false)
-        .dropOffLocation;
-
-    Map pickUpCoOrdinatesMap = {
-      "latitude": pickUpLocation!.latitudePosition.toString(),
-      "longitude": pickUpLocation.longitudePosition.toString(),
-    };
-
-    Map dropOffDestinationCoOrdinatesMap = {
-      "latitude": dropOffDestinationLocation!.latitudePosition.toString(),
-      "longitude": dropOffDestinationLocation.longitudePosition.toString(),
-    };
-
-    Map driverCoOrdinates = {
-      "latitude": "",
-      "longitude": "",
-    };
-
-    Map dataMap = {
-      "tripID": tripRequestRef!.key,
-      "publishDateTime": DateTime.now().toString(),
-
-      "userName": userName,
-      "userPhone": userPhone,
-      "userID": userID,
-      "pickUpLatLng": pickUpCoOrdinatesMap,
-      "dropOffLatLng": dropOffDestinationCoOrdinatesMap,
-      "pickUpAddress": pickUpLocation.placeName,
-      "dropOffAddress": dropOffDestinationLocation.placeName,
-
-      "driverID": "waiting",
-      "carDetails": "",
-      "driverLocation": driverCoOrdinates,
-      "driverName": "",
-      "driverPhone": "",
-      "driverPhoto": "",
-      "fareAmount": "",
-      "status": "new",
-    };
-
-    tripRequestRef!.set(dataMap);
-
-    tripStreamSubscription = tripRequestRef!.onValue.listen((eventSnapshot) async
-    {
-      if (eventSnapshot.snapshot.value == null) {
-        return;
-      }
-
-      if ((eventSnapshot.snapshot.value as Map)["driverName"] != null) {
-        nameDriver = (eventSnapshot.snapshot.value as Map)["driverName"];
-      }
-
-      if ((eventSnapshot.snapshot.value as Map)["driverPhone"] != null) {
-        phoneNumberDriver =
-        (eventSnapshot.snapshot.value as Map)["driverPhone"];
-      }
-
-      if ((eventSnapshot.snapshot.value as Map)["drivePhoto"] != null) {
-        photoDriver = (eventSnapshot.snapshot.value as Map)["driverPhoto"];
-      }
-
-      if ((eventSnapshot.snapshot.value as Map)["carDetails"] != null) {
-        carDetailsDriver = (eventSnapshot.snapshot.value as Map)["driverName"];
-      }
-
-      if ((eventSnapshot.snapshot.value as Map)["driverLocation"] != null) {
-        double driverLatitude = double.parse(
-            (eventSnapshot.snapshot.value as Map)["driverLocation"]["latitude"]
-                .toString());
-        double driverLongitude = double.parse(
-            (eventSnapshot.snapshot.value as Map)["driverLocation"]["longitude"]
-                .toString());
-        LatLng driverCurrentLocationLatLng = LatLng(
-            driverLatitude, driverLongitude);
-
-        if (status == "accepted") {
-          updateFromDriverCurrentLocationToPickUp(driverCurrentLocationLatLng);
-        }
-        else if (status == "arrived") {
-          setState(() {
-            tripStatusDisplay = "O motorista chegou!";
-          });
-        }
-        else if (status == "onTrip") {
-          updateFromDriverCurrentLocationToDropOffDestination(
-              driverCurrentLocationLatLng);
-        }
-      }
-
-      if(status == "accepted")
-      {
-        displayTripDetailsContainer();
-
-        Geofire.stopListener();
-
-        setState(() {
-          markerSet.removeWhere((element) => element.markerId.value.contains("driver"));
-        });
-      }
-
-      if(status == "ended")
-      {
-        if((eventSnapshot.snapshot.value as Map)["fareAmount"] != null)
-        {
-          double fareAmount = double.parse((eventSnapshot.snapshot.value as Map)["fareAmount"].toString());
-
-          var responseFromPaymentDialog = await showDialog(
-            context: context,
-            builder: (BuildContext context) => PaymentDialog(fareAmount: fareAmount.toString()),
-          );
-
-          if(responseFromPaymentDialog == "paid")
-          {
-            tripRequestRef!.onDisconnect();
-            tripRequestRef = null;
-
-            tripStreamSubscription!.cancel();
-            tripStreamSubscription = null;
-
-            resetAppNow();
-          }
-        }
-      }
-    });
-  }
-
-  displayTripDetailsContainer()
-  {
-    setState(() {
-      requestContainerHeight = 0;
-      tripContainerHeight = 291;
-      bottomMapPadding = 201;
-    });
-  }
-
-  updateFromDriverCurrentLocationToPickUp(driverCurrentLocationLatLng) async
-  {
-    if (!requestingDirectionDetailsInfo) {
-      requestingDirectionDetailsInfo = true;
-
-      var userPickUpLocationLatLng = LatLng(
-          currentPositionOfUser!.latitude, currentPositionOfUser!.longitude);
-
-      var directionDetailsPickUp = await CommonMethods
-          .getDirectionDetailsFromAPI(
-          driverCurrentLocationLatLng, userPickUpLocationLatLng);
-
-      if (directionDetailsPickUp == null) {
-        return;
-      }
-
-      setState(() {
-        tripStatusDisplay = "Motorista está à caminho - ${directionDetailsPickUp.durationTextString}";
-      });
-
-      requestingDirectionDetailsInfo = false;
-    }
-  }
-
-  updateFromDriverCurrentLocationToDropOffDestination(driverCurrentLocationLatLng) async
-  {
-    if (!requestingDirectionDetailsInfo) {
-      requestingDirectionDetailsInfo = true;
-
-      var dropOffLocation = Provider
-          .of<AppInfo>(context, listen: false)
-          .dropOffLocation;
-      var userDropOffLocationLatLng = LatLng(dropOffLocation!.latitudePosition!,
-          dropOffLocation!.longitudePosition!);
-
-      var directionDetailsPickUp = await CommonMethods
-          .getDirectionDetailsFromAPI(
-          driverCurrentLocationLatLng, userDropOffLocationLatLng);
-
-      if (directionDetailsPickUp == null) {
-        return;
-      }
-
-      setState(() {
-        tripStatusDisplay =
-        "Motorista ao destino - ${directionDetailsPickUp.durationTextString}";
-      });
-
-      requestingDirectionDetailsInfo = false;
-    }
   }
 
   noDriverAvailable() {
     showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (BuildContext context) =>
-            InfoDialog(
-              title: "Serviço Indisponível",
-              description: "Nenhum motorista está disponível no momento próximo ao local. Tente novamente mais tarde.",
-            ));
+        builder: (BuildContext context) => InfoDialog(
+            title: "Nenhum motorista disponível",
+            description: "Nenhum motorista foi encontrado próximo à sua localização. Tente novamente mais tarde."
+        )
+    );
   }
 
   searchDriver() {
-    if (availableNearbyOnlineDriversList!.isEmpty) {
-      cancelRideRequest();
-      resetAppNow();
+    OnlineNearbyDrivers? nearestDriver = ManageDriversMethods.getNearestDriver(selectedServiceType!);
+
+    if (nearestDriver != null) {
+      print("Nearest driver found: ${nearestDriver.uidDriver}, Latitude: ${nearestDriver.latDriver}, Longitude: ${nearestDriver.lngDriver}, ServiceType: ${nearestDriver.serviceType}");
+
+      sendNotificationToDriver(nearestDriver);
+    } else {
+      print("No nearest driver found for service type: $selectedServiceType");
       noDriverAvailable();
-      return;
+      resetAppNow();
     }
-
-    var currentDriver = availableNearbyOnlineDriversList![0];
-
-    // Send notification to current driver -> Selected driver
-    sendNotificationToDriver(currentDriver);
-
-    availableNearbyOnlineDriversList!.removeAt(0);
   }
 
   sendNotificationToDriver(OnlineNearbyDrivers currentDriver) {
-    // Update Driver newTripStatus => Assign tripID to current driver
     DatabaseReference currentDriverRef = FirebaseDatabase.instance
         .ref()
         .child("drivers")
@@ -656,7 +709,6 @@ class _HomePageState extends State<HomePage> {
 
     currentDriverRef.set(tripRequestRef!.key);
 
-    // Get current driver device registrationToken
     DatabaseReference tokenOfCurrentDriverRef = FirebaseDatabase.instance
         .ref()
         .child("drivers")
@@ -666,9 +718,16 @@ class _HomePageState extends State<HomePage> {
     tokenOfCurrentDriverRef.once().then((dataSnapshot) {
       if (dataSnapshot.snapshot.value != null) {
         String deviceToken = dataSnapshot.snapshot.value.toString();
+
+        print("Device Token do motorista: $deviceToken");
+
         PushNotificationService.sendNotificationToSelectedDriver(
-            deviceToken, context, tripRequestRef!.key.toString());
+            deviceToken,
+            context,
+            tripRequestRef!.key.toString()
+        );
       } else {
+        print("Token do dispositivo não encontrado para o motorista");
         return;
       }
 
@@ -684,11 +743,12 @@ class _HomePageState extends State<HomePage> {
           requestTimeoutDriver = 20;
         }
 
-        currentDriverRef.onValue.listen((event) {
+        currentDriverRef.onValue.listen((dataSnapshot) {
           if (dataSnapshot.snapshot.value.toString() == "accepted") {
             timer.cancel();
             currentDriverRef.onDisconnect();
             requestTimeoutDriver = 20;
+            displayTripDetailsContainer();
           }
         });
 
@@ -704,13 +764,130 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  void showServiceInfoDialog(String serviceName) {
+    String infoText;
+    switch (serviceName) {
+      case "Sedan Exec.":
+        infoText = "Número de Passageiros: 4 (+ motorista)\nNúmero de Malas: 3\nTipos de Carros: Corolla, Cruze, Sentra";
+        break;
+      case "Sedan Prime":
+        infoText = "Número de Passageiros: 4 (+ motorista)\nNúmero de Malas: 3\nTipos de Carros: BMW Série 3, Mercedes-Benz Classe C";
+        break;
+      case "SUV Especial":
+        infoText = "Número de Passageiros: 6 (+ motorista)\nNúmero de Malas: 4\nTipos de Carros: Compass, Corolla Cross, Taos";
+        break;
+      case "SUV Prime":
+        infoText = "Número de Passageiros: 6 (+ motorista)\nNúmero de Malas: 4\nTipos de Carros: SW4, Commander, Tiguan";
+        break;
+      case "Mini Van":
+        infoText = "Número de Passageiros: 8 (+ motorista)\nNúmero de Malas: 6\nTipos de Carros: Honda Odyssey, Toyota Sienna";
+        break;
+      case "Van":
+        infoText = "Número de Passageiros: 12 (+ motorista)\nNúmero de Malas: 10\nTipos de Carros: Mercedes-Benz Sprinter, Ford Transit";
+        break;
+      default:
+        infoText = "Informações não disponíveis.";
+    }
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            serviceName,
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            infoText,
+            style: TextStyle(color: Colors.white70),
+          ),
+          backgroundColor: Colors.black87,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: Colors.blue.shade900, width: 2),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text(
+                "Fechar",
+                style: TextStyle(color: Colors.blue.shade900),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget buildServiceTypeCard(
+      String serviceName, String serviceImage, DirectionDetails? tripDirectionDetailsInfo) {
+    double fare = 0.0;
+    if (tripDirectionDetailsInfo != null) {
+      fare = cMethods.calculateFareAmount(tripDirectionDetailsInfo, serviceName);
+    }
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          selectedServiceType = serviceName;
+          stateOfApp = "requesting";
+        });
+
+        displayRequestContainer();
+
+        availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
+
+        searchDriver();
+
+      },
+      child: Container(
+        width: 180,
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selectedServiceType == serviceName ? Colors.blue : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(serviceImage, height: 60),
+                const SizedBox(height: 8),
+                Text(serviceName, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text("Fare: \$${fare.toStringAsFixed(2)}", style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                Text("Time: ${tripDirectionDetailsInfo?.durationTextString ?? ''}", style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              ],
+            ),
+            Positioned(
+              top: -10,
+              right: -12,
+              child: IconButton(
+                icon: Icon(Icons.info, color: Colors.white),
+                onPressed: () {
+                  showServiceInfoDialog(serviceName);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     makeDriverNearbyCarIcon();
 
     return Scaffold(
       key: sKey,
-
       drawer: Container(
         width: 255,
         color: Colors.black87,
@@ -724,7 +901,6 @@ class _HomePageState extends State<HomePage> {
                 thickness: 1,
               ),
 
-              //header
               Container(
                 color: Colors.black54,
                 height: 160,
@@ -789,7 +965,6 @@ class _HomePageState extends State<HomePage> {
                 height: 10,
               ),
 
-              //body
               GestureDetector(
                 onTap: ()
                 {
@@ -838,7 +1013,6 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         children: [
 
-          ///google map
           GoogleMap(
             padding: EdgeInsets.only(top: 26, bottom: bottomMapPadding),
             mapType: MapType.normal,
@@ -860,10 +1034,9 @@ class _HomePageState extends State<HomePage> {
             },
           ),
 
-          ///drawer button
           Positioned(
-            top: 36,
-            left: 19,
+            top: 40,
+            left: 20,
             child: GestureDetector(
               onTap: () {
                 if (isDrawerOpened == true) {
@@ -897,19 +1070,17 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          ///buttons container
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: Container(
-              height: 250, // Aumente a altura conforme necessário
+              height: 250,
               color: Colors.black.withOpacity(0.8),
               padding: const EdgeInsets.symmetric(
                   vertical: 20, horizontal: 20),
               child: Column(
                 children: [
-                  // Barra de pesquisa
                   GestureDetector(
                     onTap: () async {
                       var responseFromSearchPage = await Navigator.push(
@@ -946,11 +1117,9 @@ class _HomePageState extends State<HomePage> {
 
                   const SizedBox(height: 20),
 
-                  // Botões de agendamento e trabalho
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      // Botão de agendamento
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () async {
@@ -958,7 +1127,7 @@ class _HomePageState extends State<HomePage> {
                                 context,
                                 MaterialPageRoute(
                                     builder: (c) =>
-                                    const DestinationSearchPage())); // Chama a nova página de busca
+                                    const DestinationSearchPage()));
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.grey,
@@ -974,15 +1143,14 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      // Botão de trabalho
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () async {
                             await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                            builder: (c) =>
-                            const TripsHistoryPage()));
+                                context,
+                                MaterialPageRoute(
+                                    builder: (c) =>
+                                    const TripsHistoryPage()));
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.grey,
@@ -1004,7 +1172,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          ///ride details container
           if (rideDetailsContainerHeight > 0)
             Positioned(
               left: 0,
@@ -1014,8 +1181,6 @@ class _HomePageState extends State<HomePage> {
                 height: rideDetailsContainerHeight,
                 decoration: const BoxDecoration(
                   color: Colors.black54,
-                  borderRadius: BorderRadius.only(topLeft: Radius.circular(5),
-                      topRight: Radius.circular(5)),
                   boxShadow: [
                     BoxShadow(
                         color: Colors.white,
@@ -1025,97 +1190,47 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  padding: const EdgeInsets.symmetric(vertical: 0),
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.only(left: 16, right: 16),
+                          padding: const EdgeInsets.only(left: 0, right: 0),
                           child: SizedBox(
-                            height: 220,
+                            height: 340,
                             child: Card(
                               elevation: 10,
                               child: Container(
-                                width: MediaQuery
-                                    .of(context)
-                                    .size
-                                    .width * .70,
+                                width: MediaQuery.of(context).size.width * 1.1,
                                 color: Colors.black45,
                                 child: Padding(
-                                  padding: const EdgeInsets.only(
-                                      top: 8, bottom: 8),
+                                  padding: const EdgeInsets.all(8.0),
                                   child: Column(
-                                    mainAxisAlignment: MainAxisAlignment
-                                        .center,
                                     children: [
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                            left: 8, right: 8),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment
-                                              .spaceBetween,
-                                          children: [
-                                            Text(
-                                              (tripDirectionDetailsInfo !=
-                                                  null)
-                                                  ? tripDirectionDetailsInfo!
-                                                  .distanceTextString!
-                                                  : "",
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                color: Colors.white70,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            Text(
-                                              (tripDirectionDetailsInfo !=
-                                                  null)
-                                                  ? tripDirectionDetailsInfo!
-                                                  .durationTextString!
-                                                  : "",
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                color: Colors.white70,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                      const SizedBox(
+                                        height: 20,
                                       ),
-                                      GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            stateOfApp = "requesting";
-                                          });
-
-                                          displayRequestContainer();
-
-                                          //get nearest available online drivers
-                                          availableNearbyOnlineDriversList =
-                                              ManageDriversMethods
-                                                  .nearbyOnlineDriversList;
-
-                                          //search driver
-                                          searchDriver();
-                                        },
-                                        child: Image.asset(
-                                          "assets/images/uberexec.png",
-                                          height: 122,
-                                          width: 122,
-                                        ),
-                                      ),
-                                      Text(
-                                        (tripDirectionDetailsInfo != null)
-                                            ? "\$ ${(cMethods
-                                            .calculateFareAmount(
-                                            tripDirectionDetailsInfo!))
-                                            .toString()}"
-                                            : "",
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          color: Colors.white70,
+                                      const Text(
+                                        "Selecione o Tipo de Serviço",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 20,
                                           fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: Row(
+                                          children: [
+                                            buildServiceTypeCard("Sedan Exec.", "assets/images/sedan_executivo.png", tripDirectionDetailsInfo),
+                                            buildServiceTypeCard("Sedan Prime", "assets/images/sedan_prime.png", tripDirectionDetailsInfo),
+                                            buildServiceTypeCard("SUV Especial", "assets/images/suv_especial.png", tripDirectionDetailsInfo),
+                                            buildServiceTypeCard("SUV Prime", "assets/images/suv_prime.png", tripDirectionDetailsInfo),
+                                            buildServiceTypeCard("Mini Van", "assets/images/mini_van.png", tripDirectionDetailsInfo),
+                                            buildServiceTypeCard("Van", "assets/images/van.png", tripDirectionDetailsInfo),
+                                          ],
                                         ),
                                       ),
                                     ],
@@ -1132,7 +1247,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          ///request container
           if (requestContainerHeight > 0)
             Positioned(
               left: 0,
@@ -1204,8 +1318,8 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          ///trip details container
-          Positioned(
+          if (tripContainerHeight > 0)
+            Positioned(
               left: 0,
               right: 0,
               bottom: 0,
@@ -1218,7 +1332,7 @@ class _HomePageState extends State<HomePage> {
                       topRight: Radius.circular(16)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.white24,
+                      color: Colors.black54,
                       blurRadius: 15.0,
                       spreadRadius: 0.5,
                       offset: Offset(
@@ -1243,74 +1357,55 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ],
                       ),
-
-
                       const SizedBox(height: 19,),
-
                       const Divider(
                         height: 1,
                         color: Colors.white70,
                         thickness: 1,
                       ),
-
                       const SizedBox(height: 19,),
-
-                      //image - driver name and driver car details
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-
                           ClipOval(
                             child: Image.network(
-                              photoDriver == ''
+                              driverPhoto == ''
                                   ? "https://firebasestorage.googleapis.com/v0/b/flutter-uber-clone-f49e2.appspot.com/o/avatarman.png?alt=media&token=39a4cc1e-6d96-4c4d-80d3-e8dc99505d73"
-                                  : photoDriver,
+                                  : driverPhoto,
                               width: 60,
                               height: 60,
                               fit: BoxFit.cover,
                             ),
                           ),
-
                           const SizedBox(width: 8,),
-
                           Column(
                             mainAxisAlignment: MainAxisAlignment.start,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-
-                              Text(nameDriver, style: const TextStyle(fontSize: 20, color: Colors.grey,),),
-
+                              Text(driverName, style: const TextStyle(fontSize: 20, color: Colors.grey,),),
                               Text(carDetailsDriver, style: const TextStyle(fontSize: 14, color: Colors.grey,),),
                             ],
                           ),
-
                         ],
                       ),
-
                       const SizedBox(height: 19,),
-
                       const Divider(
                         height: 1,
                         color: Colors.white70,
                         thickness: 1,
                       ),
-
                       const SizedBox(height: 19,),
-
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-
                           GestureDetector(
-                            onTap: ()
-                            {
-                              launchUrl(Uri.parse("tel://$phoneNumberDriver"));
+                            onTap: () {
+                              launchUrl(Uri.parse("tel://$driverPhone"));
                             },
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-
                                 Container(
                                   height: 50,
                                   width: 50,
@@ -1326,24 +1421,18 @@ class _HomePageState extends State<HomePage> {
                                     color: Colors.white,
                                   ),
                                 ),
-
                                 const SizedBox(height: 11,),
-
-                                const Text("Call", style: TextStyle(color: Colors.grey,),),
-
+                                const Text("Ligar", style: TextStyle(color: Colors.grey,),),
                               ],
                             ),
                           ),
-
                         ],
                       ),
                     ],
                   ),
                 ),
-
-
-              )
-          ),
+              ),
+            ),
         ],
       ),
     );
