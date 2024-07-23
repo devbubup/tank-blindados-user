@@ -50,12 +50,12 @@ class PushNotificationService {
   static sendNotificationToSelectedDriver(String deviceToken,
       BuildContext context, String tripID) async {
     String dropOffDestinationAddress = Provider
-        .of<AppInfo>(context, listen: false)
+        .of<MyAppInfo>(context, listen: false)
         .dropOffLocation!
         .placeName
         .toString();
     String pickUpAddress = Provider
-        .of<AppInfo>(context, listen: false)
+        .of<MyAppInfo>(context, listen: false)
         .pickUpLocation!
         .placeName
         .toString();

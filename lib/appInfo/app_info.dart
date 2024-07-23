@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:users_app/models/address_model.dart';
 
-class AppInfo extends ChangeNotifier {
+class MyAppInfo extends ChangeNotifier {
   AddressModel? pickUpLocation;
   AddressModel? dropOffLocation;
 

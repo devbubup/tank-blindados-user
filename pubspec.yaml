@@ -55,6 +55,7 @@ dependencies:
   flutter_datetime_picker:
   url_launcher:
   restart_app:
+  flutter_stripe: ^10.2.0
 
 dev_dependencies:
   flutter_test:

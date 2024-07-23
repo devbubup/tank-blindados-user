@@ -26,7 +26,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
   void initState() {
     super.initState();
     // Defina o endereço de coleta inicial no controlador de texto
-    String userAddress = Provider.of<AppInfo>(context, listen: false).pickUpLocation?.humanReadableAddress ?? "";
+    String userAddress = Provider.of<MyAppInfo>(context, listen: false).pickUpLocation?.humanReadableAddress ?? "";
     pickUpTextEditingController.text = userAddress;
   }
 

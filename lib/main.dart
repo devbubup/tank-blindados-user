@@ -1,16 +1,18 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:users_app/appInfo/app_info.dart';
 import 'package:users_app/authentication/login_screen.dart';
-import 'package:users_app/authentication/signup_screen.dart';
 import 'package:users_app/pages/home_page.dart';
 
 Future<void> main() async
 {
   WidgetsFlutterBinding.ensureInitialized();
+  Stripe.publishableKey = "pk_test_51PaRqBHdm0or1Wle97GOnyRlNbuuVgIKzr9KHevsGaOCQv0R0E4K7FS6Qo2nammBczA6rdtdRb8F3ueYmcNb6F1B00yEgrOLgd";
+  Stripe.instance.applySettings();
   await Firebase.initializeApp();
 
   await Permission.locationWhenInUse.isDenied.then((valueOfPermission)
@@ -32,7 +34,7 @@ class MyApp extends StatelessWidget
   Widget build(BuildContext context)
   {
     return ChangeNotifierProvider(
-      create: (context) => AppInfo(),
+      create: (context) => MyAppInfo(),
       child: MaterialApp(
         title: 'User App',
         debugShowCheckedModeBanner: false,
@@ -44,3 +46,4 @@ class MyApp extends StatelessWidget
     );
   }
 }
+

@@ -170,7 +170,7 @@ class _HomePageState extends State<HomePage> {
     if (!requestingDirectionDetailsInfo) {
       requestingDirectionDetailsInfo = true;
 
-      var dropOffLocation = Provider.of<AppInfo>(context, listen: false).dropOffLocation;
+      var dropOffLocation = Provider.of<MyAppInfo>(context, listen: false).dropOffLocation;
       var userDropOffLocationLatLng = LatLng(dropOffLocation!.latitudePosition!,
           dropOffLocation.longitudePosition!);
 
@@ -227,8 +227,8 @@ class _HomePageState extends State<HomePage> {
   void makeTripRequest() {
     tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").push();
 
-    var pickUpLocation = Provider.of<AppInfo>(context, listen: false).pickUpLocation;
-    var dropOffDestinationLocation = Provider.of<AppInfo>(context, listen: false).dropOffLocation;
+    var pickUpLocation = Provider.of<MyAppInfo>(context, listen: false).pickUpLocation;
+    var dropOffDestinationLocation = Provider.of<MyAppInfo>(context, listen: false).dropOffLocation;
 
     Map pickUpCoOrdinatesMap = {
       "latitude": pickUpLocation!.latitudePosition.toString(),
@@ -413,10 +413,10 @@ class _HomePageState extends State<HomePage> {
 
   retrieveDirectionDetails() async {
     var pickUpLocation = Provider
-        .of<AppInfo>(context, listen: false)
+        .of<MyAppInfo>(context, listen: false)
         .pickUpLocation;
     var dropOffDestinationLocation = Provider
-        .of<AppInfo>(context, listen: false)
+        .of<MyAppInfo>(context, listen: false)
         .dropOffLocation;
 
     var pickupGeoGraphicCoOrdinates = LatLng(

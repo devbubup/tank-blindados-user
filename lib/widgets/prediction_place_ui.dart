@@ -59,7 +59,7 @@ class _PredictionPlaceUIState extends State<PredictionPlaceUI> {
         placeID: placeID,
       );
 
-      Provider.of<AppInfo>(context, listen: false).updateDropOffLocation(dropOffLocation);
+      Provider.of<MyAppInfo>(context, listen: false).updateDropOffLocation(dropOffLocation);
       Navigator.pop(context, "placeSelected");
     }
   }
