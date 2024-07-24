@@ -305,6 +305,8 @@ class _HomePageState extends State<HomePage> {
         }
       } else if (status == "ended") {
         print("Trip ended");
+        // Remover o diálogo de pagamento
+        /*
         if (snapshotValue["fareAmount"] != null) {
           double fareAmount = double.tryParse(snapshotValue["fareAmount"].toString()) ?? 0.0;
           var responseFromPaymentDialog = await showDialog(
@@ -322,6 +324,14 @@ class _HomePageState extends State<HomePage> {
             resetAppNow();
           }
         }
+        */
+        tripRequestRef!.onDisconnect();
+        tripRequestRef = null;
+
+        tripStreamSubscription!.cancel();
+        tripStreamSubscription = null;
+
+        resetAppNow();
       }
     });
   }
@@ -828,18 +838,26 @@ class _HomePageState extends State<HomePage> {
       fare = cMethods.calculateFareAmount(tripDirectionDetailsInfo, serviceName);
     }
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         setState(() {
           selectedServiceType = serviceName;
           stateOfApp = "requesting";
         });
 
-        displayRequestContainer();
+        // Mostrar o diálogo de pagamento imediatamente
+        var responseFromPaymentDialog = await showDialog(
+          context: context,
+          builder: (BuildContext context) => PaymentDialog(fareAmount: fare.toStringAsFixed(2)),
+        );
 
-        availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
-
-        searchDriver();
-
+        if (responseFromPaymentDialog == "paid") {
+          // Proceda com a solicitação da viagem
+          displayRequestContainer();
+          availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
+          searchDriver();
+        } else {
+          resetAppNow();
+        }
       },
       child: Container(
         width: 180,
@@ -937,8 +955,7 @@ class _HomePageState extends State<HomePage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (
-                                        context) => const ProfilePage()),
+                                    builder: (context) => const ProfilePage()),
                               );
                             },
                             child: const Text(
@@ -966,8 +983,7 @@ class _HomePageState extends State<HomePage> {
               ),
 
               GestureDetector(
-                onTap: ()
-                {
+                onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (c)=> AboutPage()));
                 },
                 child: ListTile(
@@ -1012,7 +1028,6 @@ class _HomePageState extends State<HomePage> {
       ),
       body: Stack(
         children: [
-
           GoogleMap(
             padding: EdgeInsets.only(top: 26, bottom: bottomMapPadding),
             mapType: MapType.normal,
@@ -1023,13 +1038,10 @@ class _HomePageState extends State<HomePage> {
             initialCameraPosition: googlePlexInitialPosition,
             onMapCreated: (GoogleMapController mapController) {
               controllerGoogleMap = mapController;
-
               googleMapCompleterController.complete(controllerGoogleMap);
-
               setState(() {
                 bottomMapPadding = 300;
               });
-
               getCurrentLiveLocationOfUser();
             },
           ),
@@ -1077,8 +1089,7 @@ class _HomePageState extends State<HomePage> {
             child: Container(
               height: 250,
               color: Colors.black.withOpacity(0.8),
-              padding: const EdgeInsets.symmetric(
-                  vertical: 20, horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
               child: Column(
                 children: [
                   GestureDetector(
@@ -1126,8 +1137,7 @@ class _HomePageState extends State<HomePage> {
                             await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (c) =>
-                                    const DestinationSearchPage()));
+                                    builder: (c) => const DestinationSearchPage()));
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.grey,
@@ -1149,8 +1159,7 @@ class _HomePageState extends State<HomePage> {
                             await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (c) =>
-                                    const TripsHistoryPage()));
+                                    builder: (c) => const TripsHistoryPage()));
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.grey,
@@ -1185,8 +1194,7 @@ class _HomePageState extends State<HomePage> {
                     BoxShadow(
                         color: Colors.white,
                         blurRadius: 0.0,
-                        spreadRadius: 0.0
-                    ),
+                        spreadRadius: 0.0),
                   ],
                 ),
                 child: Padding(
@@ -1208,9 +1216,7 @@ class _HomePageState extends State<HomePage> {
                                   padding: const EdgeInsets.all(8.0),
                                   child: Column(
                                     children: [
-                                      const SizedBox(
-                                        height: 20,
-                                      ),
+                                      const SizedBox(height: 20),
                                       const Text(
                                         "Selecione o Tipo de Serviço",
                                         style: TextStyle(
@@ -1277,9 +1283,7 @@ class _HomePageState extends State<HomePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(
-                        height: 12,
-                      ),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: 200,
                         child: LoadingAnimationWidget.flickr(
@@ -1288,9 +1292,7 @@ class _HomePageState extends State<HomePage> {
                           size: 50,
                         ),
                       ),
-                      const SizedBox(
-                        height: 20,
-                      ),
+                      const SizedBox(height: 20),
                       GestureDetector(
                         onTap: () {
                           resetAppNow();
