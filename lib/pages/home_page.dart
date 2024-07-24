@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
@@ -60,6 +62,7 @@ class _HomePageState extends State<HomePage> {
   StreamSubscription<DatabaseEvent>? tripStreamSubscription;
   bool requestingDirectionDetailsInfo = false;
   String? selectedServiceType;
+  String currentPaymentIntentId = "";
 
   // Variáveis relacionadas ao motorista
   String driverName = "";
@@ -79,47 +82,6 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     tripStreamSubscription?.cancel();
     super.dispose();
-  }
-
-  void listenToTripStatus() {
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").child(user.uid);
-      tripStreamSubscription = tripRequestRef!.onValue.listen((event) {
-        if (event.snapshot.value != null) {
-          Map<String, dynamic> tripData = Map<String, dynamic>.from(event.snapshot.value as Map);
-          String tripStatus = tripData["status"];
-          String? driverLat = tripData["driverLocation"]?["latitude"];
-          String? driverLng = tripData["driverLocation"]?["longitude"];
-
-          print("Trip status updated: $tripStatus");
-          print("Driver Location: Lat = $driverLat, Lng = $driverLng");
-
-          setState(() {
-            if (tripStatus == "accepted") {
-              print("Status: accepted");
-              displayTripDetailsContainer();
-              updateDriverDetails(tripData["driverID"]);
-            } else if (tripStatus == "arrived") {
-              print("Status: arrived");
-              tripStatusDisplay = "Driver has arrived";
-            } else if (tripStatus == "ontrip") {
-              if (driverLat != null && driverLng != null) {
-                updateFromDriverCurrentLocationToDropOffDestination(LatLng(double.parse(driverLat), double.parse(driverLng)));
-              }
-            } else if (tripStatus == "completed") {
-              print("Status: completed");
-              tripStatusDisplay = "Trip completed";
-              resetAppNow();
-            }
-          });
-        } else {
-          print("Trip request data is null");
-        }
-      });
-    } else {
-      print("User is null");
-    }
   }
 
   void updateDriverDetails(String driverID) async {
@@ -831,12 +793,34 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<Map<String, dynamic>> createPaymentIntent(String amount) async {
+    final response = await http.post(
+      Uri.parse('https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/stripePaymentIntentRequest'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'email': FirebaseAuth.instance.currentUser?.email,
+        'amount': amount,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      final errorResponse = jsonDecode(response.body);
+      print('Error creating Payment Intent: ${errorResponse['error']}');  // Log de erro detalhado
+      throw Exception('Failed to create Payment Intent');
+    }
+  }
+
   Widget buildServiceTypeCard(
       String serviceName, String serviceImage, DirectionDetails? tripDirectionDetailsInfo) {
     double fare = 0.0;
     if (tripDirectionDetailsInfo != null) {
       fare = cMethods.calculateFareAmount(tripDirectionDetailsInfo, serviceName);
     }
+
     return GestureDetector(
       onTap: () async {
         setState(() {
@@ -844,18 +828,57 @@ class _HomePageState extends State<HomePage> {
           stateOfApp = "requesting";
         });
 
-        // Mostrar o diálogo de pagamento imediatamente
-        var responseFromPaymentDialog = await showDialog(
-          context: context,
-          builder: (BuildContext context) => PaymentDialog(fareAmount: fare.toStringAsFixed(2)),
-        );
+        // Verifique se há motoristas disponíveis para o serviço selecionado
+        OnlineNearbyDrivers? nearestDriver = ManageDriversMethods.getNearestDriver(serviceName);
 
-        if (responseFromPaymentDialog == "paid") {
-          // Proceda com a solicitação da viagem
-          displayRequestContainer();
-          availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
-          searchDriver();
+        if (nearestDriver != null) {
+          // Mostrar o diálogo de pagamento imediatamente
+          var responseFromPaymentDialog = await showDialog(
+            context: context,
+            builder: (BuildContext context) => PaymentDialog(fareAmount: fare.toStringAsFixed(2)),
+          );
+
+          if (responseFromPaymentDialog == "paid") {
+            // Proceda com a solicitação da viagem
+            displayRequestContainer();
+            availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
+            searchDriver();
+          } else {
+            resetAppNow();
+          }
         } else {
+          // Exiba uma mensagem de erro se não houver motoristas disponíveis
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: Text(
+                  "Nenhum motorista disponível",
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: Text(
+                  "Nenhum motorista foi encontrado próximo à sua localização para o serviço selecionado. Tente novamente mais tarde.",
+                  style: TextStyle(color: Colors.white70),
+                ),
+                backgroundColor: Colors.black87,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: Colors.blue.shade900, width: 2),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: Text(
+                      "Fechar",
+                      style: TextStyle(color: Colors.blue.shade900),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
           resetAppNow();
         }
       },
@@ -899,6 +922,69 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
+  Future<void> capturePaymentIntent(String paymentIntentId) async {
+    final response = await http.post(
+      Uri.parse('https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/stripePaymentIntentRequest'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'paymentIntentId': paymentIntentId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to capture Payment Intent');
+    }
+  }
+
+  void listenToTripStatus() {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      tripRequestRef = FirebaseDatabase.instance.ref().child("tripRequests").child(user.uid);
+      tripStreamSubscription = tripRequestRef!.onValue.listen((event) {
+        if (event.snapshot.value != null) {
+          Map<String, dynamic> tripData = Map<String, dynamic>.from(event.snapshot.value as Map);
+          String tripStatus = tripData["status"];
+          String? driverLat = tripData["driverLocation"]?["latitude"];
+          String? driverLng = tripData["driverLocation"]?["longitude"];
+
+          print("Trip status updated: $tripStatus");
+          print("Driver Location: Lat = $driverLat, Lng = $driverLng");
+
+          setState(() {
+            if (tripStatus == "accepted") {
+              print("Status: accepted");
+              displayTripDetailsContainer();
+              updateDriverDetails(tripData["driverID"]);
+            } else if (tripStatus == "arrived") {
+              print("Status: arrived");
+              tripStatusDisplay = "Driver has arrived";
+            } else if (tripStatus == "ontrip") {
+              if (driverLat != null && driverLng != null) {
+                updateFromDriverCurrentLocationToDropOffDestination(LatLng(double.parse(driverLat), double.parse(driverLng)));
+              }
+            } else if (tripStatus == "completed") {
+              print("Status: completed");
+              tripStatusDisplay = "Trip completed";
+              // Capturar pagamento aqui
+              capturePaymentIntent(currentPaymentIntentId).then((_) {
+                resetAppNow();
+              }).catchError((error) {
+                print("Error capturing payment: $error");
+              });
+            }
+          });
+        } else {
+          print("Trip request data is null");
+        }
+      });
+    } else {
+      print("User is null");
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -995,7 +1081,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   title: const Text(
-                    "About",
+                    "Sobre",
                     style: TextStyle(color: Colors.grey),
                   ),
                 ),
@@ -1017,7 +1103,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   title: const Text(
-                    "Logout",
+                    "Sair",
                     style: TextStyle(color: Colors.grey),
                   ),
                 ),
@@ -1145,10 +1231,19 @@ class _HomePageState extends State<HomePage> {
                                 borderRadius: BorderRadius.circular(5)),
                             padding: const EdgeInsets.all(20),
                           ),
-                          child: const Icon(
-                            Icons.calendar_today,
-                            color: Colors.white,
-                            size: 25,
+                          child: Column(
+                            children: const [
+                              Icon(
+                                Icons.calendar_today,
+                                color: Colors.white,
+                                size: 25,
+                              ),
+                              SizedBox(height: 5),
+                              Text(
+                                "Agendar",
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -1167,10 +1262,19 @@ class _HomePageState extends State<HomePage> {
                                 borderRadius: BorderRadius.circular(5)),
                             padding: const EdgeInsets.all(20),
                           ),
-                          child: const Icon(
-                            Icons.work,
-                            color: Colors.white,
-                            size: 25,
+                          child: Column(
+                            children: const [
+                              Icon(
+                                Icons.work,
+                                color: Colors.white,
+                                size: 25,
+                              ),
+                              SizedBox(height: 5),
+                              Text(
+                                "Histórico",
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
                           ),
                         ),
                       ),
