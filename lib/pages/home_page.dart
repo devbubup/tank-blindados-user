@@ -521,14 +521,6 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  cancelRideRequest() {
-    tripRequestRef!.remove();
-
-    setState(() {
-      stateOfApp = "normal";
-    });
-  }
-
   displayRequestContainer() {
     setState(() {
       rideDetailsContainerHeight = 0;
@@ -794,8 +786,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<Map<String, dynamic>> createPaymentIntent(String amount) async {
+    final url = 'https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/stripePaymentIntentRequest';
+    print('Creating Payment Intent: URL = $url, Amount = $amount');
+
     final response = await http.post(
-      Uri.parse('https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/stripePaymentIntentRequest'),
+      Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
       },
@@ -805,11 +800,21 @@ class _HomePageState extends State<HomePage> {
       }),
     );
 
+    print('Response Status Code: ${response.statusCode}');
+    print('Response Body: ${response.body}');
+
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      final responseBody = jsonDecode(response.body);
+      print('Decoded Response Body: $responseBody');
+      if (responseBody != null && responseBody.containsKey('id')) {
+        return responseBody;
+      } else {
+        print('Invalid response from payment intent creation: $responseBody');
+        throw Exception('Invalid response from payment intent creation');
+      }
     } else {
       final errorResponse = jsonDecode(response.body);
-      print('Error creating Payment Intent: ${errorResponse['error']}');  // Log de erro detalhado
+      print('Error creating Payment Intent: ${errorResponse['error']}');
       throw Exception('Failed to create Payment Intent');
     }
   }
@@ -832,22 +837,47 @@ class _HomePageState extends State<HomePage> {
         OnlineNearbyDrivers? nearestDriver = ManageDriversMethods.getNearestDriver(serviceName);
 
         if (nearestDriver != null) {
-          // Mostrar o diálogo de pagamento imediatamente
-          var responseFromPaymentDialog = await showDialog(
-            context: context,
-            builder: (BuildContext context) => PaymentDialog(fareAmount: fare.toStringAsFixed(2)),
-          );
+          try {
+            print('Creating Payment Intent for service: $serviceName');
+            // Crie a intenção de pagamento
+            Map<String, dynamic> paymentIntentData = await createPaymentIntent(fare.toStringAsFixed(2));
 
-          if (responseFromPaymentDialog == "paid") {
-            // Proceda com a solicitação da viagem
-            displayRequestContainer();
-            availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
-            searchDriver();
-          } else {
+            // Salve o ID da intenção de pagamento
+            if (paymentIntentData['id'] != null && paymentIntentData['clientSecret'] != null) {
+              currentPaymentIntentId = paymentIntentData['id'];
+              print('Payment Intent ID: $currentPaymentIntentId');
+              String paymentIntentClientSecret = paymentIntentData['clientSecret'];
+              print('Payment Intent Client Secret: $paymentIntentClientSecret');
+
+              // Mostrar o diálogo de pagamento imediatamente
+              var responseFromPaymentDialog = await showDialog(
+                context: context,
+                builder: (BuildContext context) => PaymentDialog(
+                  fareAmount: fare.toStringAsFixed(2),
+                  clientSecret: paymentIntentClientSecret,
+                ),
+              );
+
+              if (responseFromPaymentDialog == "paid") {
+                // Proceda com a solicitação da viagem
+                print('Payment completed, proceeding with trip request');
+                displayRequestContainer();
+                availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
+                searchDriver();
+              } else {
+                print('Payment not completed, resetting app state');
+                resetAppNow();
+              }
+            } else {
+              throw Exception('Payment Intent ID or Client Secret is null');
+            }
+          } catch (e) {
+            print("Error during payment process: $e");
             resetAppNow();
           }
         } else {
           // Exiba uma mensagem de erro se não houver motoristas disponíveis
+          print('No drivers available for the selected service');
           showDialog(
             context: context,
             builder: (BuildContext context) {
@@ -923,9 +953,25 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> refundPaymentIntent(String paymentIntentId) async {
+    final response = await http.post(
+      Uri.parse('https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/refundPaymentIntent'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'paymentIntentId': paymentIntentId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to refund Payment Intent');
+    }
+  }
+
   Future<void> capturePaymentIntent(String paymentIntentId) async {
     final response = await http.post(
-      Uri.parse('https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/stripePaymentIntentRequest'),
+      Uri.parse('https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/capturePaymentIntent'),
       headers: {
         'Content-Type': 'application/json',
       },
@@ -936,6 +982,31 @@ class _HomePageState extends State<HomePage> {
 
     if (response.statusCode != 200) {
       throw Exception('Failed to capture Payment Intent');
+    }
+  }
+
+  void cancelRideRequest() async {
+    try {
+      await refundPaymentIntent(currentPaymentIntentId);
+      tripRequestRef!.remove();
+      setState(() {
+        stateOfApp = "normal";
+      });
+      print("Trip request canceled and payment refunded.");
+    } catch (e) {
+      print("Error refunding payment: $e");
+    }
+  }
+
+  void acceptRideRequest() async {
+    try {
+      await capturePaymentIntent(currentPaymentIntentId);
+      setState(() {
+        tripStatusDisplay = "Ride accepted, payment captured.";
+      });
+      print("Ride accepted and payment captured.");
+    } catch (e) {
+      print("Error capturing payment: $e");
     }
   }
 
@@ -955,25 +1026,18 @@ class _HomePageState extends State<HomePage> {
 
           setState(() {
             if (tripStatus == "accepted") {
-              print("Status: accepted");
+              acceptRideRequest();
               displayTripDetailsContainer();
               updateDriverDetails(tripData["driverID"]);
             } else if (tripStatus == "arrived") {
-              print("Status: arrived");
               tripStatusDisplay = "Driver has arrived";
             } else if (tripStatus == "ontrip") {
               if (driverLat != null && driverLng != null) {
                 updateFromDriverCurrentLocationToDropOffDestination(LatLng(double.parse(driverLat), double.parse(driverLng)));
               }
             } else if (tripStatus == "completed") {
-              print("Status: completed");
               tripStatusDisplay = "Trip completed";
-              // Capturar pagamento aqui
-              capturePaymentIntent(currentPaymentIntentId).then((_) {
-                resetAppNow();
-              }).catchError((error) {
-                print("Error capturing payment: $error");
-              });
+              resetAppNow();
             }
           });
         } else {
@@ -984,7 +1048,6 @@ class _HomePageState extends State<HomePage> {
       print("User is null");
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -1004,7 +1067,6 @@ class _HomePageState extends State<HomePage> {
                 color: Colors.grey,
                 thickness: 1,
               ),
-
               Container(
                 color: Colors.black54,
                 height: 160,
@@ -1057,17 +1119,14 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-
               const Divider(
                 height: 1,
                 color: Colors.grey,
                 thickness: 1,
               ),
-
               const SizedBox(
                 height: 10,
               ),
-
               GestureDetector(
                 onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (c)=> AboutPage()));
@@ -1086,11 +1145,9 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-
               GestureDetector(
                 onTap: () {
                   FirebaseAuth.instance.signOut();
-
                   Navigator.push(context,
                       MaterialPageRoute(builder: (c) => const LoginScreen()));
                 },
@@ -1131,7 +1188,6 @@ class _HomePageState extends State<HomePage> {
               getCurrentLiveLocationOfUser();
             },
           ),
-
           Positioned(
             top: 40,
             left: 20,
@@ -1167,7 +1223,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-
           Positioned(
             left: 0,
             right: 0,
@@ -1211,9 +1266,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
@@ -1284,7 +1337,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-
           if (rideDetailsContainerHeight > 0)
             Positioned(
               left: 0,
@@ -1356,7 +1408,6 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-
           if (requestContainerHeight > 0)
             Positioned(
               left: 0,
@@ -1423,7 +1474,6 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-
           if (tripContainerHeight > 0)
             Positioned(
               left: 0,
