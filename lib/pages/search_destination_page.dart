@@ -11,7 +11,10 @@ import '../widgets/info_dialog.dart';
 import 'package:users_app/models/regions.dart'; // Importar o arquivo regions
 
 class SearchDestinationPage extends StatefulWidget {
-  const SearchDestinationPage({super.key});
+  final String? initialSearchText;
+  final LatLng? predefinedDestinationLatLng;
+
+  const SearchDestinationPage({super.key, this.initialSearchText, this.predefinedDestinationLatLng});
 
   @override
   State<SearchDestinationPage> createState() => _SearchDestinationPageState();
@@ -25,9 +28,17 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
   @override
   void initState() {
     super.initState();
-    // Defina o endereço de coleta inicial no controlador de texto
     String userAddress = Provider.of<MyAppInfo>(context, listen: false).pickUpLocation?.humanReadableAddress ?? "";
     pickUpTextEditingController.text = userAddress;
+
+    if (widget.initialSearchText != null) {
+      destinationTextEditingController.text = widget.initialSearchText!;
+      searchLocation(widget.initialSearchText!); // Perform search with initial search text
+    }
+
+    if (widget.predefinedDestinationLatLng != null) {
+      // Handle predefined destination logic if necessary
+    }
   }
 
   searchLocation(String locationName) async {

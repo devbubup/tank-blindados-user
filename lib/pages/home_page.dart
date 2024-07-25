@@ -64,6 +64,35 @@ class _HomePageState extends State<HomePage> {
   String? selectedServiceType;
   String currentPaymentIntentId = "";
 
+  // Sugestões
+  final List<Map<String, dynamic>> suggestions = [
+    {
+      "title": "Loire Bistrô",
+      "description": "Comida Francesa, Internacional",
+      "icon": Icons.restaurant,
+    },
+    {
+      "title": "Parque Lage",
+      "description": "Parque de patrimônio histórico",
+      "icon": Icons.park,
+    },
+    {
+      "title": "Museu do Amanhã",
+      "description": "Arte moderna e contemporânea.",
+      "icon": Icons.museum,
+    },
+    {
+      "title": "Barra Shopping",
+      "description": "Muitas lojas e entretenimento.",
+      "icon": Icons.shopping_bag,
+    },
+    {
+      "title": "Cinesystem",
+      "description": "Últimos lançamentos em cartaz.",
+      "icon": Icons.movie,
+    },
+  ];
+
   // Variáveis relacionadas ao motorista
   String driverName = "";
   String driverPhoto = "";
@@ -985,6 +1014,24 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  void openSearchDestinationPageWithSuggestion(Map<String, dynamic> suggestion) {
+    var placeName = suggestion["title"];
+    var latLng = suggestion["latLng"];
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SearchDestinationPage(
+          initialSearchText: placeName,
+          predefinedDestinationLatLng: latLng,
+        ),
+      ),
+    ).then((responseFromSearchPage) {
+      if (responseFromSearchPage == "placeSelected") {
+        displayUserRideDetailsContainer();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1173,114 +1220,207 @@ class _HomePageState extends State<HomePage> {
             right: 0,
             bottom: 0,
             child: Container(
-              height: 250,
+              height: 300, // Reduzir a altura inicial do container
               color: Colors.black.withOpacity(0.8),
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-              child: Column(
-                children: [
-                  GestureDetector(
-                    onTap: () async {
-                      var responseFromSearchPage = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (c) => const SearchDestinationPage()));
-                      if (responseFromSearchPage == "placeSelected") {
-                        displayUserRideDetailsContainer();
-                      }
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          children: const [
-                            Icon(Icons.search, color: Colors.grey),
-                            SizedBox(width: 10),
-                            Text(
-                              "Qual o destino?",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 18,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+              child: SingleChildScrollView( // Permitir rolagem
+                child: Column(
+                  children: [
+
+                    const SizedBox(height: 15),
+
+                    GestureDetector(
+                      onTap: () async {
+                        var responseFromSearchPage = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (c) => const SearchDestinationPage()));
+                        if (responseFromSearchPage == "placeSelected") {
+                          displayUserRideDetailsContainer();
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: const [
+                              Icon(Icons.search, color: Colors.grey),
+                              SizedBox(width: 10),
+                              Text(
+                                "Qual o destino?",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 18,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (c) => const DestinationSearchPage()));
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(5)),
-                            padding: const EdgeInsets.all(20),
-                          ),
-                          child: Column(
-                            children: const [
-                              Icon(
-                                Icons.calendar_today,
-                                color: Colors.white,
-                                size: 25,
-                              ),
-                              SizedBox(height: 5),
-                              Text(
-                                "Agendar",
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ],
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (c) => const DestinationSearchPage()));
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(5)),
+                              padding: const EdgeInsets.all(20),
+                            ),
+                            child: Column(
+                              children: const [
+                                Icon(
+                                  Icons.calendar_today,
+                                  color: Colors.white,
+                                  size: 25,
+                                ),
+                                SizedBox(height: 5),
+                                Text(
+                                  "Agendar",
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (c) => const TripsHistoryPage()));
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(5)),
-                            padding: const EdgeInsets.all(20),
-                          ),
-                          child: Column(
-                            children: const [
-                              Icon(
-                                Icons.work,
-                                color: Colors.white,
-                                size: 25,
-                              ),
-                              SizedBox(height: 5),
-                              Text(
-                                "Histórico",
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ],
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (c) => const TripsHistoryPage()));
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(5)),
+                              padding: const EdgeInsets.all(20),
+                            ),
+                            child: Column(
+                              children: const [
+                                Icon(
+                                  Icons.work,
+                                  color: Colors.white,
+                                  size: 25,
+                                ),
+                                SizedBox(height: 5),
+                                Text(
+                                  "Histórico",
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    Container(
+                      height: 120, // Reduzindo a altura do container
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Sugestões da Guardiões",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: suggestions.length,
+                              itemBuilder: (context, index) {
+                                final suggestion = suggestions[index];
+                                return GestureDetector(
+                                  onTap: () {
+                                    openSearchDestinationPageWithSuggestion(suggestion);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                    child: Container(
+                                      width: 250, // Ajustando a largura para evitar overflow
+                                      decoration: BoxDecoration(
+                                        color: Colors.black87,
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black26,
+                                            blurRadius: 5,
+                                            spreadRadius: 0.5,
+                                            offset: Offset(0.7, 0.7),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Icon(
+                                              suggestion["icon"],
+                                              size: 40, // Ajustando o tamanho do ícone
+                                              color: Colors.blueAccent,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Flexible(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    suggestion["title"]!,
+                                                    style: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    suggestion["description"]!,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
