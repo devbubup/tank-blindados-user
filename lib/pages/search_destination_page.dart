@@ -11,7 +11,10 @@ import '../widgets/info_dialog.dart';
 import 'package:users_app/models/regions.dart'; // Importar o arquivo regions
 
 class SearchDestinationPage extends StatefulWidget {
-  const SearchDestinationPage({super.key});
+  final String? initialSearchText;
+  final LatLng? predefinedDestinationLatLng;
+
+  const SearchDestinationPage({super.key, this.initialSearchText, this.predefinedDestinationLatLng});
 
   @override
   State<SearchDestinationPage> createState() => _SearchDestinationPageState();
@@ -21,13 +24,29 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
   TextEditingController pickUpTextEditingController = TextEditingController();
   TextEditingController destinationTextEditingController = TextEditingController();
   List<PredictionModel> dropOffPredictionsPlacesList = [];
+  List<Map<String, dynamic>> suggestionList = [
+    {"name": "Copacabana", "icon": Icons.beach_access, "description": "Famosa praia no Rio de Janeiro"},
+    {"name": "Maracanã", "icon": Icons.sports_soccer, "description": "Estádio de futebol famoso"},
+    {"name": "Barra Shopping", "icon": Icons.shop, "description": "O maior shopping do Rio de Janeiro"},
+    {"name": "Parque Lage", "icon": Icons.park, "description": "Parque com trilhas e uma mansão histórica"},
+    {"name": "Museu do Amanhã", "icon": Icons.museum, "description": "Museu de ciências futurístico"},
+    {"name": "AquaRio", "icon": Icons.pool, "description": "O maior aquário marinho da América do Sul"},
+  ];
 
   @override
   void initState() {
     super.initState();
-    // Defina o endereço de coleta inicial no controlador de texto
     String userAddress = Provider.of<MyAppInfo>(context, listen: false).pickUpLocation?.humanReadableAddress ?? "";
     pickUpTextEditingController.text = userAddress;
+
+    if (widget.initialSearchText != null) {
+      destinationTextEditingController.text = widget.initialSearchText!;
+      searchLocation(widget.initialSearchText!); // Perform search with initial search text
+    }
+
+    if (widget.predefinedDestinationLatLng != null) {
+      // Handle predefined destination logic if necessary
+    }
   }
 
   searchLocation(String locationName) async {
@@ -210,7 +229,100 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
               ),
             ),
 
-            (dropOffPredictionsPlacesList.length > 0)
+            if (suggestionList.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Sugestões do Guardião:',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      height: 80,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: suggestionList.length,
+                        itemBuilder: (context, index) {
+                          return GestureDetector(
+                            onTap: () {
+                              destinationTextEditingController.text = suggestionList[index]['name'];
+                              searchLocation(suggestionList[index]['name']);
+                            },
+                            child: Container(
+                              width: 240,
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 5,
+                                    spreadRadius: 0.5,
+                                    offset: Offset(0.7, 0.7),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    suggestionList[index]['icon'],
+                                    color: Colors.black54,
+                                    size: 50,
+                                  ),
+                                  const SizedBox(width: 18),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          suggestionList[index]['name'],
+                                          style: const TextStyle(
+                                            color: Colors.black,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          suggestionList[index]['description'],
+                                          style: const TextStyle(
+                                            color: Colors.black54,
+                                            fontSize: 14,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Divider(
+                      color: Colors.white,
+                      thickness: 1,
+                    ),
+                  ],
+                ),
+              ),
+
+            // Exibindo resultados da pesquisa de local
+            (dropOffPredictionsPlacesList.isNotEmpty)
                 ? Padding(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: ListView.separated(
@@ -224,7 +336,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                     ),
                   );
                 },
-                separatorBuilder: (BuildContext context, int index) => const SizedBox(height: 2,),
+                separatorBuilder: (BuildContext context, int index) => const SizedBox(height: 2),
                 itemCount: dropOffPredictionsPlacesList.length,
                 shrinkWrap: true,
                 physics: const ClampingScrollPhysics(),

@@ -7,8 +7,9 @@ import '../methods/common_methods.dart';
 
 class PaymentDialog extends StatefulWidget {
   final String fareAmount;
+  final String clientSecret;
 
-  PaymentDialog({super.key, required this.fareAmount});
+  PaymentDialog({super.key, required this.fareAmount, required this.clientSecret});
 
   @override
   State<PaymentDialog> createState() => _PaymentDialogState();
@@ -44,10 +45,11 @@ class _PaymentDialogState extends State<PaymentDialog> {
 
         await Stripe.instance.initPaymentSheet(
           paymentSheetParameters: SetupPaymentSheetParameters(
-            paymentIntentClientSecret: jsonResponse['paymentIntent'],
+            paymentIntentClientSecret: widget.clientSecret,
             merchantDisplayName: 'TESTE',
-            customerId: jsonResponse['customer'],
-            customerEphemeralKeySecret: jsonResponse['ephemeralKey'],
+            // Verifique se essas chaves estão corretas e foram passadas corretamente
+            // customerId: jsonResponse['customer'],
+            // customerEphemeralKeySecret: jsonResponse['ephemeralKey'],
             style: ThemeMode.dark, // Certifique-se de adicionar isso para não causar erro
           ),
         );
