@@ -1183,7 +1183,7 @@ class _HomePageState extends State<HomePage> {
               controllerGoogleMap = mapController;
               googleMapCompleterController.complete(controllerGoogleMap);
               setState(() {
-                bottomMapPadding = 300;
+                bottomMapPadding = 260;
               });
               getCurrentLiveLocationOfUser();
             },

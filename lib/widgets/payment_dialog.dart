@@ -17,6 +17,7 @@ class PaymentDialog extends StatefulWidget {
 
 class _PaymentDialogState extends State<PaymentDialog> {
   CommonMethods cMethods = CommonMethods();
+  bool saveCardForFuture = true;
 
   Future<void> initPayment({
     required String email,
@@ -32,7 +33,8 @@ class _PaymentDialogState extends State<PaymentDialog> {
         },
         body: jsonEncode({
           'email': email,
-          'amount': (amount * 100).toInt().toString(), // Converte para centavos
+          'amount': (amount * 100).toInt().toString(),
+          'saveCardForFuture': saveCardForFuture,
         }),
       );
 
@@ -46,10 +48,9 @@ class _PaymentDialogState extends State<PaymentDialog> {
         await Stripe.instance.initPaymentSheet(
           paymentSheetParameters: SetupPaymentSheetParameters(
             paymentIntentClientSecret: widget.clientSecret,
-            merchantDisplayName: 'TESTE',
-            // Verifique se essas chaves estão corretas e foram passadas corretamente
-            // customerId: jsonResponse['customer'],
-            // customerEphemeralKeySecret: jsonResponse['ephemeralKey'],
+            merchantDisplayName: 'Guard. Blindados',
+            customerId: jsonResponse['customer'],
+            customerEphemeralKeySecret: jsonResponse['ephemeralKey'],
             style: ThemeMode.dark, // Certifique-se de adicionar isso para não causar erro
           ),
         );
