@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -298,14 +300,17 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  makeDriverNearbyCarIcon() {
+  Future<Uint8List> getBytesFromAsset(String path, int width) async {
+    ByteData data = await rootBundle.load(path);
+    ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(), targetWidth: width);
+    ui.FrameInfo fi = await codec.getNextFrame();
+    return (await fi.image.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
+  }
+
+  makeDriverNearbyCarIcon() async {
     if (carIconNearbyDriver == null) {
-      ImageConfiguration configuration = createLocalImageConfiguration(
-          context, size: const Size(0.5, 0.5));
-      BitmapDescriptor.fromAssetImage(
-          configuration, "assets/images/tracking.png").then((iconImage) {
-        carIconNearbyDriver = iconImage;
-      });
+      final Uint8List markerIcon = await getBytesFromAsset('assets/images/tracking.png', 128); // Ajuste o tamanho aqui
+      carIconNearbyDriver = BitmapDescriptor.fromBytes(markerIcon);
     }
   }
 
