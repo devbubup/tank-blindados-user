@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:developer';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_stripe/flutter_stripe.dart';
 
 import '../methods/common_methods.dart';
 import '../pages/home_page.dart';
@@ -72,7 +76,89 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     usersRef.set(userDataMap);
 
-    Navigator.push(context, MaterialPageRoute(builder: (c) => HomePage()));
+    // Exibir opção para salvar cartão
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.blue.shade900, width: 2),
+          ),
+          title: Text(
+            "Salvar Cartão",
+            style: TextStyle(color: Colors.black),
+          ),
+          content: Text(
+            "Deseja salvar um cartão para pagamentos futuros? Também é possível salvar mais tarde.",
+            style: TextStyle(color: Colors.grey),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                createSetupIntent(userFirebase!.uid);
+              },
+              child: Text(
+                "Sim",
+                style: TextStyle(color: Colors.black),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (c) => HomePage()));
+              },
+              child: Text(
+                "Não",
+                style: TextStyle(color: Colors.red.shade900),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> createSetupIntent(String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/createSetupIntent'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'email': emailTextEditingController.text.trim(),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final setupIntentResponse = jsonDecode(response.body);
+        log('SetupIntent response: $setupIntentResponse');
+
+        await Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: SetupPaymentSheetParameters(
+            setupIntentClientSecret: setupIntentResponse['clientSecret'],
+            merchantDisplayName: 'Guard. Blindados',
+          ),
+        );
+
+        await Stripe.instance.presentPaymentSheet();
+
+        Navigator.push(context, MaterialPageRoute(builder: (c) => HomePage()));
+      } else {
+        throw Exception('Failed to create SetupIntent.');
+      }
+    } catch (error) {
+      log('Error: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save card: $error'),
+        ),
+      );
+    }
   }
 
   @override

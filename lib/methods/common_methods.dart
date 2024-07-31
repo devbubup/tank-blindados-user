@@ -102,50 +102,47 @@ class CommonMethods
     return detailsModel;
   }
 
-  double calculateFareAmount(
-      DirectionDetails directionDetails, String serviceType) {
+   double calculateFareAmount(DirectionDetails directionDetails, String serviceType) {
     double distancePerKmAmount;
-    double durationPerMinuteAmount = 0.3;
+    double durationPerMinuteAmount;
     double baseFareAmount;
 
+    // Set the fare amounts based on the service type
     switch (serviceType) {
-      case 'Sedan Exec.':
-        distancePerKmAmount = 0.5;
-        baseFareAmount = 3;
+      case "Sedan Exec.":
+        distancePerKmAmount = 10;
+        baseFareAmount = 25;
         break;
-      case 'Sedan Prime':
-        distancePerKmAmount = 0.6;
-        baseFareAmount = 4;
+      case "Sedan Prime":
+        distancePerKmAmount = 12;
+        baseFareAmount = 30;
         break;
-      case 'SUV Especial':
-        distancePerKmAmount = 0.7;
-        baseFareAmount = 5;
+      case "SUV Especial":
+        distancePerKmAmount = 15;
+        baseFareAmount = 35;
         break;
-      case 'SUV Prime':
-        distancePerKmAmount = 0.8;
-        baseFareAmount = 6;
+      case "SUV Prime":
+        distancePerKmAmount = 17;
+        baseFareAmount = 40;
         break;
-      case 'Mini Van':
-        distancePerKmAmount = 0.9;
-        baseFareAmount = 7;
+      case "Mini Van":
+        distancePerKmAmount = 17;
+        baseFareAmount = 45;
         break;
-      case 'Van':
-        distancePerKmAmount = 1.0;
-        baseFareAmount = 20;
+      case "Van":
+        distancePerKmAmount = 18;
+        baseFareAmount = 50;
         break;
       default:
-        distancePerKmAmount = 0.4;
+      // Default values if the service type is not recognized
+        distancePerKmAmount = 15;
         baseFareAmount = 20;
     }
+    double totalDistanceTravelFareAmount = (directionDetails.distanceValueDigits! / 1000) * distancePerKmAmount;
 
-    double totalDistanceTravelFareAmount =
-        (directionDetails.distanceValueDigits! / 1000) * distancePerKmAmount;
-    double totalDurationSpendFareAmount =
-        (directionDetails.durationValueDigits! / 60) * durationPerMinuteAmount;
+    double overAllTotalFareAmount = baseFareAmount + totalDistanceTravelFareAmount;
 
-    double overAllTotalFareAmount =
-        baseFareAmount + totalDistanceTravelFareAmount + totalDurationSpendFareAmount;
-
-    return overAllTotalFareAmount;
+    return double.parse(overAllTotalFareAmount.toStringAsFixed(2));
   }
+
 }

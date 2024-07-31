@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
+import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -20,6 +22,7 @@ import 'package:users_app/methods/manage_drivers_methods.dart';
 import 'package:users_app/methods/push_notification_service.dart';
 import 'package:users_app/models/direction_details.dart';
 import 'package:users_app/models/online_nearby_drivers.dart';
+import 'package:users_app/pages/save_card.dart';
 import 'package:users_app/pages/search_destination_page.dart';
 import 'package:users_app/pages/profile_page.dart';
 import 'package:users_app/pages/destination_search_page.dart';
@@ -844,38 +847,13 @@ class _HomePageState extends State<HomePage> {
         if (nearestDriver != null) {
           try {
             print('Creating Payment Intent for service: $serviceName');
-            // Crie a intenção de pagamento
-            Map<String, dynamic> paymentIntentData = await createPaymentIntent(fare.toStringAsFixed(2));
-
-            // Salve o ID da intenção de pagamento
-            if (paymentIntentData['id'] != null && paymentIntentData['clientSecret'] != null) {
-              currentPaymentIntentId = paymentIntentData['id'];
-              print('Payment Intent ID: $currentPaymentIntentId');
-              String paymentIntentClientSecret = paymentIntentData['clientSecret'];
-              print('Payment Intent Client Secret: $paymentIntentClientSecret');
-
-              // Mostrar o diálogo de pagamento imediatamente
-              var responseFromPaymentDialog = await showDialog(
-                context: context,
-                builder: (BuildContext context) => PaymentDialog(
-                  fareAmount: fare.toStringAsFixed(2),
-                  clientSecret: paymentIntentClientSecret,
-                ),
-              );
-
-              if (responseFromPaymentDialog == "paid") {
-                // Proceda com a solicitação da viagem
-                print('Payment completed, proceeding with trip request');
-                displayRequestContainer();
-                availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
-                searchDriver();
-              } else {
-                print('Payment not completed, resetting app state');
-                resetAppNow();
-              }
-            } else {
-              throw Exception('Payment Intent ID or Client Secret is null');
-            }
+            // Chame a função initPayment
+            await initPayment(
+              email: FirebaseAuth.instance.currentUser!.email!,
+              amount: fare,
+              serviceName: serviceName,
+              context: context,
+            );
           } catch (e) {
             print("Error during payment process: $e");
             resetAppNow();
@@ -1054,6 +1032,92 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> initPayment({
+    required String email,
+    required double amount,
+    required String serviceName,
+    required BuildContext context,
+  }) async {
+    try {
+      log('Initiating payment...');
+      final response = await http.post(
+        Uri.parse('https://us-central1-flutter-uber-clone-f49e2.cloudfunctions.net/stripePaymentIntentRequest'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'email': email,
+          'amount': (amount).toInt().toString(),
+        }),
+      );
+
+      log('Response status: ${response.statusCode}');
+      log('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        log('JSON response: $jsonResponse');
+
+        await stripe.Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: stripe.SetupPaymentSheetParameters(
+            paymentIntentClientSecret: jsonResponse['clientSecret'],
+            merchantDisplayName: 'Guard. Blindados',
+            customerId: jsonResponse['customer'],
+            customerEphemeralKeySecret: jsonResponse['ephemeralKey'],
+            style: ThemeMode.dark,
+          ),
+        );
+
+        await stripe.Stripe.instance.presentPaymentSheet();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment is successful'),
+            ),
+          );
+
+          setState(() {
+            currentPaymentIntentId = jsonResponse['id'];
+            selectedServiceType = serviceName;
+            stateOfApp = "requesting";
+          });
+
+          displayRequestContainer();
+          availableNearbyOnlineDriversList = ManageDriversMethods.nearbyOnlineDriversList;
+          searchDriver();
+        }
+      } else {
+        log('Error response: ${response.body}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to initiate payment.'),
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      log('Error: $error');
+      if (mounted) {
+        if (error is stripe.StripeException) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('An error occurred: ${error.error.localizedMessage}'),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('An error occurred: $error'),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     makeDriverNearbyCarIcon();
@@ -1166,6 +1230,24 @@ class _HomePageState extends State<HomePage> {
                   ),
                   title: const Text(
                     "Sair",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (c) => SaveCardPage()));
+                },
+                child: ListTile(
+                  leading: IconButton(
+                    onPressed: () {},
+                    icon: const Icon(
+                      Icons.credit_card,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  title: const Text(
+                    "Salvar Cartão",
                     style: TextStyle(color: Colors.grey),
                   ),
                 ),

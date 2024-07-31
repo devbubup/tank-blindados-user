@@ -17,13 +17,17 @@ class PaymentDialog extends StatefulWidget {
 
 class _PaymentDialogState extends State<PaymentDialog> {
   CommonMethods cMethods = CommonMethods();
-  bool saveCardForFuture = true;
+  bool isLoading = false;
 
   Future<void> initPayment({
     required String email,
     required double amount,
     required BuildContext context,
   }) async {
+    setState(() {
+      isLoading = true;
+    });
+
     try {
       log('Initiating payment...');
       final response = await http.post(
@@ -34,7 +38,6 @@ class _PaymentDialogState extends State<PaymentDialog> {
         body: jsonEncode({
           'email': email,
           'amount': (amount * 100).toInt().toString(),
-          'saveCardForFuture': saveCardForFuture,
         }),
       );
 
@@ -51,7 +54,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
             merchantDisplayName: 'Guard. Blindados',
             customerId: jsonResponse['customer'],
             customerEphemeralKeySecret: jsonResponse['ephemeralKey'],
-            style: ThemeMode.dark, // Certifique-se de adicionar isso para não causar erro
+            style: ThemeMode.dark,
           ),
         );
 
@@ -69,7 +72,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
         log('Error response: ${response.body}');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text('Failed to initiate payment.'),
             ),
           );
@@ -92,6 +95,10 @@ class _PaymentDialogState extends State<PaymentDialog> {
           );
         }
       }
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
@@ -143,29 +150,35 @@ class _PaymentDialogState extends State<PaymentDialog> {
                 style: const TextStyle(color: Colors.grey),
               ),
             ),
-            const SizedBox(height: 31),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context, "paid");
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-              ),
-              child: const Text("Dinheiro"),
-            ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () async {
-                await initPayment(
-                  email: 'email@test.com', // Use o email do usuário
-                  amount: double.parse(widget.fareAmount),
-                  context: context,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-              ),
-              child: const Text(" Cartão "),
+            isLoading
+                ? const CircularProgressIndicator()
+                : Column(
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context, "paid");
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                  ),
+                  child: const Text("Dinheiro"),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () async {
+                    await initPayment(
+                      email: 'email@test.com', // Use o email do usuário
+                      amount: double.parse(widget.fareAmount),
+                      context: context,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                  ),
+                  child: const Text(" Cartão "),
+                ),
+              ],
             ),
             const SizedBox(height: 41),
           ],
