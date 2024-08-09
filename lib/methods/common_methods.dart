@@ -134,7 +134,6 @@ class CommonMethods
         baseFareAmount = 50;
         break;
       default:
-      // Default values if the service type is not recognized
         distancePerKmAmount = 15;
         baseFareAmount = 20;
     }

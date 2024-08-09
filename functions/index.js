@@ -170,17 +170,43 @@ exports.createSetupIntent = functions.https.onRequest(async (req, res) => {
 });
 
 exports.listPaymentMethods = functions.https.onRequest(async (req, res) => {
-  const { customerId } = req.body;
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).send({ error: 'Email is required.' });
+  }
 
   try {
+    let customerList = await stripe.customers.list({ email });
+    if (customerList.data.length === 0) {
+      return res.status(400).send({ error: 'Customer not found' });
+    }
+
+    const customer = customerList.data[0];
     const paymentMethods = await stripe.paymentMethods.list({
-      customer: customerId,
+      customer: customer.id,
       type: 'card',
     });
 
-    res.status(200).send(paymentMethods);
+    res.status(200).send({ data: paymentMethods.data });
   } catch (error) {
     console.error('Error listing payment methods:', error);
+    res.status(400).send({ error: error.message });
+  }
+});
+
+exports.removePaymentMethod = functions.https.onRequest(async (req, res) => {
+  const { paymentMethodId } = req.body;
+
+  if (!paymentMethodId) {
+    return res.status(400).send({ error: 'PaymentMethod ID is required.' });
+  }
+
+  try {
+    const paymentMethod = await stripe.paymentMethods.detach(paymentMethodId);
+    res.status(200).send(paymentMethod);
+  } catch (error) {
+    console.error('Error removing payment method:', error);
     res.status(400).send({ error: error.message });
   }
 });

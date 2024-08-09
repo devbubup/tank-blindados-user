@@ -110,7 +110,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
             Card(
               elevation: 10,
               child: Container(
-                height: 250,
+                height: 230,
                 decoration: const BoxDecoration(
                   color: Colors.black12,
                   boxShadow: [
@@ -235,7 +235,6 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 10),
                     const Text(
                       'Sugestões do Guardião:',
                       style: TextStyle(
@@ -245,7 +244,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                     ),
                     const SizedBox(height: 15),
                     SizedBox(
-                      height: 80,
+                      height: 90,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         itemCount: suggestionList.length,
@@ -256,7 +255,7 @@ class _SearchDestinationPageState extends State<SearchDestinationPage> {
                               searchLocation(suggestionList[index]['name']);
                             },
                             child: Container(
-                              width: 240,
+                              width: 260,
                               margin: const EdgeInsets.only(right: 8),
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(

@@ -1216,6 +1216,24 @@ class _HomePageState extends State<HomePage> {
               ),
               GestureDetector(
                 onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (c) => SaveCardPage()));
+                },
+                child: ListTile(
+                  leading: IconButton(
+                    onPressed: () {},
+                    icon: const Icon(
+                      Icons.credit_card,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  title: const Text(
+                    "Salvar Cartão",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
                   FirebaseAuth.instance.signOut();
                   Navigator.push(context,
                       MaterialPageRoute(builder: (c) => const LoginScreen()));
@@ -1230,24 +1248,6 @@ class _HomePageState extends State<HomePage> {
                   ),
                   title: const Text(
                     "Sair",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (c) => SaveCardPage()));
-                },
-                child: ListTile(
-                  leading: IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.credit_card,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  title: const Text(
-                    "Salvar Cartão",
                     style: TextStyle(color: Colors.grey),
                   ),
                 ),
